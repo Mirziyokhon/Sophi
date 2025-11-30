@@ -1,5 +1,6 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "cd v0-design && npm run build"
 
 [deploy]
 healthcheckPath = "/health"
@@ -9,3 +10,4 @@ restartPolicyMaxRetries = 10
 
 [env]
 PYTHON_VERSION = "3.11"
+NODE_VERSION = "18"
