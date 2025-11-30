@@ -3,8 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.render"
 
 [deploy]
-healthcheckPath = "/_stcore/health"
-healthcheckTimeout = 100
+# No health check path - using Docker health check instead
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
