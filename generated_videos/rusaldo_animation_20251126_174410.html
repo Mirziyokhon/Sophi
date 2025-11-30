@@ -1,0 +1,387 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Northern Hemisphere Detective</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+            padding: 10px;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        button, input[type="range"] {
+            margin: 5px;
+            vertical-align: middle;
+        }
+
+        #timecode {
+            display: inline-block;
+            width: 80px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <input type="range" id="timelineSlider" min="0" max="60" value="0" step="0.1">
+            <span id="timecode">00:00 / 01:00</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="60" step="1">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecodeLabel = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let isPlaying = false;
+        let startTime;
+        let currentTime = 0;
+        let duration = 60; // Default duration
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine you're a detective, hot on the trail of Earth's secrets. Our first clue? The Northern Hemisphere, the giant landmass north of the equator, teeming with mysteries." },
+            { time: 5, text: "But what drives its pulse? It all starts with a tilt, causing longer days and warmer weather from June to September." },
+            { time: 10, text: "During this time, sunlight pours energy into plant cells, fueling their growth." },
+            { time: 15, text: "Meanwhile, powerful ocean currents churn in a clockwise dance, redistributing heat like a global thermostat." },
+            { time: 20, text: "Long ago, massive glaciers reshaped these lands, leaving behind clues of icy advances." },
+            { time: 25, text: "Now, climates range from the frozen Arctic to steamy tropics, creating a world of ecosystems." },
+            { time: 30, text: "From its ice sheets to jungles, the Northern Hemisphere's landscape is shaped by Earth's tilt, ocean currents, and the dance of global weather." },
+            { time: 35, text: "So, what other hidden clues are waiting to be uncovered?" },
+            { time: 40, text: "" },
+            { time: 45, text: "" },
+            { time: 50, text: "" },
+            { time: 55, text: "" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+       function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3 * scale;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 60 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 40 * scale, x, y + 40 * scale, color);
+
+            if (pose === 'idle') {
+                // Arms (idle)
+                roughLine(x, y - 10 * scale, x - 30 * scale, y + 10 * scale, color);
+                roughLine(x, y - 10 * scale, x + 30 * scale, y + 10 * scale, color);
+
+                // Legs (idle)
+                roughLine(x, y + 40 * scale, x - 20 * scale, y + 70 * scale, color);
+                roughLine(x, y + 40 * scale, x + 20 * scale, y + 70 * scale, color);
+            } else if (pose === 'thinking') {
+                // Arms (thinking - hand on chin)
+                roughLine(x, y - 10 * scale, x - 15 * scale, y - 30 * scale, color);
+                roughLine(x - 15 * scale, y - 30 * scale, x - 5 * scale, y - 45 * scale, color);
+
+                roughLine(x, y - 10 * scale, x + 30 * scale, y + 10 * scale, color);
+
+                // Legs (idle)
+                roughLine(x, y + 40 * scale, x - 20 * scale, y + 70 * scale, color);
+                roughLine(x, y + 40 * scale, x + 20 * scale, y + 70 * scale, color);
+            } else if (pose === 'running') {
+                // Arms (running)
+                roughLine(x, y - 10 * scale, x - 40 * scale, y - 10 * scale, color);
+                roughLine(x, y - 10 * scale, x + 40 * scale, y + 20 * scale, color);
+
+                // Legs (running)
+                roughLine(x, y + 40 * scale, x - 30 * scale, y + 80 * scale, color);
+                roughLine(x, y + 40 * scale, x + 30 * scale, y + 50 * scale, color);
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let subtitleText = '';
+
+            if (time >= 0 && time < 5) {
+                subtitleText = narration[0].text;
+                // Scene 1: Detective with magnifying glass
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("The Northern Hemisphere: A Detective Story", 100, 100);
+                drawStickFigure(300, 700, 'thinking', 2, 'blue');
+
+                ctx.beginPath();
+                ctx.arc(1400, 500, 200, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ADD8E6';
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = 'green';
+                ctx.fillRect(1250, 350, 300, 300);
+            } else if (time >= 5 && time < 10) {
+                subtitleText = narration[1].text;
+                // Scene 2: Earth tilting
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("The Earth's Tilt", 100, 100);
+
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate(23.5 * Math.PI / 180);
+                ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 300, 0, 2 * Math.PI);
+                ctx.fillStyle = '#0077BE';
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.resetTransform();
+
+            } else if (time >= 10 && time < 15) {
+                subtitleText = narration[2].text;
+                // Scene 3: Sunlight into chloroplasts
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("Sunlight & Plants", 100, 100);
+
+                ctx.fillStyle = 'yellow';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, 100, 50, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.ellipse(canvas.width / 2, canvas.height / 2, 100, 50, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+
+            } else if (time >= 15 && time < 20) {
+                subtitleText = narration[3].text;
+                // Scene 4: Ocean currents
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("Ocean Currents", 100, 100);
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 200, 0, 1.5 * Math.PI);
+                ctx.stroke();
+            } else if (time >= 20 && time < 25) {
+                subtitleText = narration[4].text;
+                // Scene 5: Glaciers
+                 ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("Glaciers", 100, 100);
+                ctx.fillStyle = '#ADD8E6';
+                ctx.fillRect(100, 300, 500, 400);
+                ctx.fillStyle = 'grey';
+                ctx.fillRect(500, 700, 500, 100);
+
+            } else if (time >= 25 && time < 30) {
+                subtitleText = narration[5].text;
+                // Scene 6: Arctic and tropics
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("Climates", 100, 100);
+                ctx.fillStyle = '#ADD8E6';
+                ctx.fillRect(100, 300, 500, 400);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(1200, 300, 500, 400);
+
+            } else if (time >= 30 && time < 35) {
+                subtitleText = narration[6].text;
+                // Scene 7: Overhead view
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText("Landscapes", 100, 100);
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 300, 0, 2 * Math.PI);
+                ctx.fillStyle = '#0077BE';
+                ctx.fill();
+                ctx.stroke();
+
+            } else if (time >= 35 && time < 40) {
+                 subtitleText = narration[7].text;
+                 drawStickFigure(300, 700, 'thinking', 2, 'blue');
+            } else if (time >= 40 && time < 45) {
+                subtitleText = "";
+            } else if (time >= 45 && time < 50) {
+                subtitleText = "";
+            } else if (time >= 50 && time < 55) {
+                subtitleText = "";
+            } else if (time >= 55 && time < 60) {
+                subtitleText = "";
+            }
+
+            subtitlesDiv.textContent = subtitleText;
+        }
+
+
+        function updateTimecode() {
+            const minutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const seconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const totalMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const totalSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeLabel.textContent = `${minutes}:${seconds} / ${totalMinutes}:${totalSeconds}`;
+        }
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+                pauseAnimation();
+            }
+
+            timelineSlider.value = currentTime;
+            updateTimecode();
+            renderScene(currentTime);
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function playAnimation() {
+            if (!isPlaying) {
+                isPlaying = true;
+                playPauseButton.textContent = 'Pause';
+                startTime = performance.now() - (currentTime * 1000);
+                animationFrameId = requestAnimationFrame(animate);
+            }
+        }
+
+        function pauseAnimation() {
+            if (isPlaying) {
+                isPlaying = false;
+                playPauseButton.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        playPauseButton.addEventListener('click', () => {
+            if (isPlaying) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        });
+
+        timelineSlider.addEventListener('input', () => {
+            currentTime = parseFloat(timelineSlider.value);
+            updateTimecode();
+            renderScene(currentTime);
+        });
+
+        durationSlider.addEventListener('input', () => {
+            duration = parseInt(durationSlider.value);
+            timelineSlider.max = duration;
+            updateTimecode();
+        });
+
+        exportButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'northern_hemisphere.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportButton.textContent = 'Export Video';
+            };
+
+            mediaRecorder.start();
+            exportButton.textContent = 'Stop Export';
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+        updateTimecode();
+        renderScene(0); // Initial render
+    </script>
+</body>
+</html>

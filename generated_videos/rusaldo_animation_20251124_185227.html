@@ -1,0 +1,460 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+<title>Photosynthesis: Earth's Energy Anthem</title>
+<style>
+body {
+  font-family: 'Patrick Hand', cursive;
+  background-color: #fffcf5;
+  margin: 0;
+  overflow: hidden;
+}
+#container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+}
+canvas {
+  border: 1px solid #ccc;
+}
+#controls {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+}
+#durationSlider {
+  width: 300px;
+  margin: 0 10px;
+}
+#subtitle {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 1.2em;
+}
+@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="container">
+  <canvas id="animationCanvas"></canvas>
+  <div id="controls">
+    <label for="durationSlider">Duration (seconds):</label>
+    <input type="range" id="durationSlider" min="30" max="180" value="30">
+    <button id="exportButton">Export Video</button>
+  </div>
+  <div id="subtitle"></div>
+</div>
+<script>
+const canvas = document.getElementById('animationCanvas');
+const ctx = canvas.getContext('2d');
+const durationSlider = document.getElementById('durationSlider');
+const exportButton = document.getElementById('exportButton');
+const subtitleDiv = document.getElementById('subtitle');
+
+let width = window.innerWidth;
+let height = window.innerHeight * 0.85;
+canvas.width = width;
+canvas.height = height;
+
+let duration = parseInt(durationSlider.value);
+let currentTime = 0;
+let lastTime = 0;
+let isRecording = false;
+let mediaRecorder;
+let recordedChunks = [];
+
+const narration = [
+  { time: 0, text: "Imagine Earth as a giant concert, powered by a song of light! Photosynthesis is nature's ultimate remix, transforming sunlight into sweet energy, like a plant's own sugary symphony." },
+  { time: 5, text: "Inside every green leaf, tiny power plants are grabbing sunlight and turning it into fuel." },
+  { time: 10, text: "This solar-powered process also releases the oxygen we breathe, the very air that lets us sing!" },
+  { time: 15, text: "Then comes the Calvin cycle, where carbon dioxide gets woven into sugary chords." },
+  { time: 20, text: "Photosynthesis: it's Earth's evergreen hit, the energy anthem that keeps life rocking!" }
+];
+
+function roughLine(x1, y1, x2, y2, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1 + Math.random() * 4 - 2);
+  for (let i = 0; i < 10; i++) {
+    const x = x1 + (x2 - x1) * (i / 9) + Math.random() * 4 - 2;
+    const y = y1 + (y2 - y1) * (i / 9) + Math.random() * 4 - 2;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(x2, y2 + Math.random() * 4 - 2);
+  ctx.stroke();
+}
+
+function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3 * scale;
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+  ctx.stroke();
+
+  // Body
+  roughLine(x, y - 30 * scale, x, y + 30 * scale, color);
+
+  // Arms
+  if (pose === 'running') {
+    roughLine(x, y - 10 * scale, x - 30 * scale, y + 10 * scale, color);
+    roughLine(x, y - 10 * scale, x + 30 * scale, y - 20 * scale, color);
+  } else if (pose === 'thinking') {
+     roughLine(x, y - 10 * scale, x - 20 * scale, y - 20 * scale, color);
+     roughLine(x, y - 10 * scale, x + 20 * scale, y - 20 * scale, color);
+  }
+  else {
+    roughLine(x, y - 10 * scale, x - 20 * scale, y, color);
+    roughLine(x, y - 10 * scale, x + 20 * scale, y, color);
+  }
+
+  // Legs
+  if (pose === 'running') {
+    roughLine(x, y + 30 * scale, x - 20 * scale, y + 50 * scale, color);
+    roughLine(x, y + 30 * scale, x + 20 * scale, y + 40 * scale, color);
+  } else {
+    roughLine(x, y + 30 * scale, x - 15 * scale, y + 60 * scale, color);
+    roughLine(x, y + 30 * scale, x + 15 * scale, y + 60 * scale, color);
+  }
+}
+
+function updateSubtitle() {
+  let currentSubtitle = "";
+  for (let i = 0; i < narration.length; i++) {
+    if (currentTime >= narration[i].time && currentTime < narration[i].time + 5) {
+      currentSubtitle = narration[i].text;
+      break;
+    }
+  }
+  subtitleDiv.textContent = currentSubtitle;
+}
+
+function drawScene1(dt) {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fffcf5";
+  ctx.fillRect(0, 0, width, height);
+
+  // Sun
+  ctx.fillStyle = "yellow";
+  ctx.beginPath();
+  ctx.arc(width / 2, height / 4, 50, 0, 2 * Math.PI);
+  ctx.fill();
+
+  // Grass
+  ctx.fillStyle = "green";
+  ctx.fillRect(0, height * 0.75, width, height * 0.25);
+
+  // Trees
+  for (let i = 0; i < 5; i++) {
+    const x = i * (width / 5) + width / 10;
+    const treeHeight = 100 + Math.random() * 50;
+    ctx.fillStyle = "brown";
+    ctx.fillRect(x - 10, height * 0.75 - treeHeight, 20, treeHeight);
+    ctx.fillStyle = "darkgreen";
+    ctx.beginPath();
+    ctx.arc(x, height * 0.75 - treeHeight, 30, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  // Animated Soundwaves
+  ctx.strokeStyle = "rgba(255, 255, 0, 0.5)";
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 3; i++) {
+    const offset = Math.sin(currentTime + i) * 20;
+    ctx.beginPath();
+    ctx.arc(width / 2, height / 4, 70 + i * 20 + offset, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+}
+
+function drawScene2(dt) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#fffcf5";
+    ctx.fillRect(0, 0, width, height);
+
+    // Leaf background
+    ctx.fillStyle = 'green';
+    ctx.beginPath();
+    ctx.ellipse(width / 2, height / 2, width / 4, height / 3, 0, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Chloroplasts
+    const numChloroplasts = 20;
+    for (let i = 0; i < numChloroplasts; i++) {
+        const angle = i * (2 * Math.PI / numChloroplasts);
+        const radius = Math.min(width / 4, height / 3) * 0.7;
+        const x = width / 2 + radius * Math.cos(angle);
+        const y = height / 2 + radius * Math.sin(angle);
+
+        // Chlorophyll molecules inside each chloroplast
+        const numChlorophyll = 5 + Math.floor(Math.random() * 5); // vary number slightly
+        for (let j = 0; j < numChlorophyll; j++) {
+            const angleChlorophyll = j * (2 * Math.PI / numChlorophyll);
+            const radiusChlorophyll = 10 * Math.random();
+            const xChlorophyll = x + radiusChlorophyll * Math.cos(angleChlorophyll);
+            const yChlorophyll = y + radiusChlorophyll * Math.sin(angleChlorophyll);
+
+            ctx.fillStyle = 'darkgreen';
+            ctx.beginPath();
+            ctx.arc(xChlorophyll, yChlorophyll, 2, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // Sunlight animation - rays of light
+        ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+        ctx.lineWidth = 2;
+        const lightRayLength = 50 + Math.sin(currentTime*2 + i) * 20;
+        const lightRayX = x + lightRayLength * Math.cos(angle);
+        const lightRayY = y + lightRayLength * Math.sin(angle);
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(lightRayX, lightRayY);
+        ctx.stroke();
+    }
+}
+
+
+function drawScene3(dt) {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fffcf5";
+  ctx.fillRect(0, 0, width, height);
+
+  // Plant Cells
+  const numCells = 10;
+  for (let i = 0; i < numCells; i++) {
+    const x = (i % 5) * (width / 5) + width / 10;
+    const y = Math.floor(i / 5) * (height / 4) + height / 4;
+    ctx.strokeStyle = "green";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 30, 20, 0, 0, 2 * Math.PI);
+    ctx.stroke();
+
+    // Oxygen Bubbles
+    if (Math.random() < 0.05) { // Spawn bubbles occasionally
+      const bubbleX = x + Math.random() * 20 - 10;
+      const bubbleY = y;
+      const bubbleSize = 5 + Math.random() * 5;
+      ctx.fillStyle = "rgba(173, 216, 230, 0.7)"; // Light blue
+      ctx.beginPath();
+      ctx.arc(bubbleX, bubbleY - (currentTime % 5) * 10, bubbleSize, 0, 2 * Math.PI); // Animated rise
+      ctx.fill();
+    }
+  }
+
+  // Human Lungs
+  ctx.fillStyle = "pink";
+  ctx.beginPath();
+  ctx.ellipse(width * 0.75, height / 2, 50, 70, 0, 0, 2 * Math.PI);
+  ctx.fill();
+
+  // Person Singing
+  drawStickFigure(width * 0.85, height * 0.75, 'idle', 1.2, 'blue');
+}
+
+function drawScene4(dt) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#fffcf5";
+    ctx.fillRect(0, 0, width, height);
+
+    // Calvin Cycle - Simplified
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) / 3;
+    const numSteps = 6; // Simplified cycle
+    const stepAngle = 2 * Math.PI / numSteps;
+
+    for (let i = 0; i < numSteps; i++) {
+        const angle1 = i * stepAngle;
+        const angle2 = (i + 1) * stepAngle;
+
+        const x1 = centerX + radius * Math.cos(angle1);
+        const y1 = centerY + radius * Math.sin(angle1);
+        const x2 = centerX + radius * Math.cos(angle2);
+        const y2 = centerY + radius * Math.sin(angle2);
+
+        // Draw connecting lines
+        ctx.strokeStyle = 'rgba(0, 100, 0, 0.8)';
+        ctx.lineWidth = 3;
+        roughLine(x1, y1, x2, y2, 'green');
+
+        // CO2 entry point (simplified)
+        if (i === 0) {
+            ctx.fillStyle = 'gray';
+            ctx.beginPath();
+            ctx.arc(x1 - 50, y1, 15, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.font = "16px Patrick Hand";
+            ctx.fillText("CO2", x1 - 65, y1 + 5);
+        }
+
+        // Sugar molecule formation (Glucose)
+        if (i === numSteps - 1) {
+            ctx.fillStyle = 'yellow';
+            ctx.beginPath();
+            ctx.arc(x2 + 50, y2, 20, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.font = "16px Patrick Hand";
+            ctx.fillText("Sugar", x2 + 35, y2 + 5);
+        }
+
+        // Musical Notes
+        const noteFrequency = 440 + Math.sin(currentTime*2 + i) * 50;
+        const noteYOffset = Math.sin(currentTime*2 + i) * 20;
+
+        ctx.fillStyle = 'rgba(255, 200, 50, 0.6)';
+        ctx.beginPath();
+        ctx.ellipse(x1, y1 + noteYOffset, 10, 15, Math.PI / 2, 0, 2 * Math.PI);
+        ctx.fill();
+    }
+}
+
+function drawScene5(dt) {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fffcf5";
+  ctx.fillRect(0, 0, width, height);
+
+  // Sub-scene 1: Forest
+  ctx.fillStyle = "darkgreen";
+  ctx.fillRect(0, 0, width / 3, height);
+
+  // Sub-scene 2: Ocean
+  ctx.fillStyle = "blue";
+  ctx.fillRect(width / 3, 0, width / 3, height);
+
+  // Sub-scene 3: Grassland
+  ctx.fillStyle = "lightgreen";
+  ctx.fillRect(width * 2 / 3, 0, width / 3, height);
+
+  // Guitar Hand
+  ctx.fillStyle = "tan";
+  ctx.beginPath();
+  ctx.ellipse(width * 0.75, height / 2, 40, 60, 0, 0, 2 * Math.PI);
+  ctx.fill();
+
+  // Guitar Strings
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {
+    roughLine(width * 0.7, height / 2 - 50 + i * 10, width * 0.8, height / 2 - 50 + i * 10, 'black');
+  }
+
+  // Show oxygen bubbles emerging from different ecosystems
+  ctx.fillStyle = 'rgba(200, 230, 255, 0.7)';
+  const numBubbles = 10;
+  for (let i = 0; i < numBubbles; i++) {
+      const x = Math.random() * width;
+      const y = height * Math.random();
+      const bubbleSize = 5 + Math.random() * 5;
+
+      ctx.beginPath();
+      ctx.arc(x, y - (currentTime % 5) * 10, bubbleSize, 0, 2 * Math.PI);
+      ctx.fill();
+  }
+}
+
+function animate(timestamp) {
+  const dt = (timestamp - lastTime) / 1000;
+  lastTime = timestamp;
+  currentTime += dt;
+
+  // Scene 1
+  if (currentTime > 0 && currentTime < duration * (5/30)) {
+    drawScene1(dt);
+  }
+  // Scene 2
+  else if (currentTime > duration * (5/30) && currentTime < duration * (10/30)) {
+    drawScene2(dt);
+  }
+  // Scene 3
+  else if (currentTime > duration * (10/30) && currentTime < duration * (15/30)) {
+    drawScene3(dt);
+  }
+  // Scene 4
+  else if (currentTime > duration * (15/30) && currentTime < duration * (20/30)) {
+    drawScene4(dt);
+  }
+  // Scene 5
+  else if (currentTime > duration * (20/30) && currentTime < duration * (25/30)) {
+    drawScene5(dt);
+  }
+
+  updateSubtitle();
+
+  if (currentTime < duration) {
+    requestAnimationFrame(animate);
+  } else {
+    console.log("Animation complete.");
+    if (isRecording) {
+      stopRecording();
+    }
+  }
+}
+
+durationSlider.addEventListener('input', () => {
+  duration = parseInt(durationSlider.value);
+  currentTime = 0; // Reset animation
+  lastTime = performance.now(); // Reset lastTime
+  requestAnimationFrame(animate); // Restart animation
+});
+
+exportButton.addEventListener('click', () => {
+  if (!isRecording) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+});
+
+function startRecording() {
+  isRecording = true;
+  recordedChunks = [];
+  exportButton.textContent = "Stop Recording";
+
+  const stream = canvas.captureStream(24);
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'animation.webm';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    exportButton.textContent = "Export Video";
+    isRecording = false;
+  };
+
+  mediaRecorder.start();
+}
+
+function stopRecording() {
+  mediaRecorder.stop();
+}
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

@@ -1,0 +1,381 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cell Membrane: The Cell's Recording Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            margin: 0 10px;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        input[type=range] {
+            width: 150px;
+        }
+
+        #durationLabel {
+            margin-left: 10px;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timeline" value="0" step="0.01">
+            <span id="timecode">00:00 / 01:00</span>
+            <label for="duration">Duration (30-180s):</label>
+            <input type="range" id="duration" min="30" max="180" value="60">
+            <span id="durationLabel">60s</span>
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationInput = document.getElementById('duration');
+        const durationLabel = document.getElementById('durationLabel');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let startTime;
+        let paused = false;
+        let currentTime = 0;
+        let duration = 60;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+
+        durationInput.addEventListener('input', () => {
+            duration = parseInt(durationInput.value);
+            durationLabel.textContent = `${duration}s`;
+            timeline.max = duration;
+            updateTimecodeDisplay();
+        });
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y -10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y -10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y + 30 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y -10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 120 * scale, color);
+                    break;
+            }
+        }
+
+        const narration = [
+            { time: 0, text: "Imagine a recording studio, the hottest track of the year being mixed. But what if I told you, every single cell in your body has its own studio, constantly producing and remixing energy?" },
+            { time: 5, text: "This recording studio, your cell, is surrounded by a 'gatekeeper' called the cell membrane. This vital structure acts like the studio's security, carefully controlling who and what gets in." },
+            { time: 10, text: "It's primarily built from a double layer of fatty molecules, like phospholipids, forming a protective shield. Embedded within this shield are protein 'bouncers,' ensuring only the right signals and supplies pass through." },
+            { time: 20, text: "The membrane regulates the flow of ions and organic molecules, maintaining perfect balance inside the cell. It also allows the cell to communicate, stick to other cells, and provides structural support by connecting to the cell's internal framework." },
+            { time: 30, text: "So next time you're listening to your favorite song, remember the cell membrane: the ultimate gatekeeper, keeping the rhythm of life playing smoothly within each and every one of your cells!" },
+            { time: 40, text: "Now, imagine YOURSELF as the architect of a new kind of cell, and design a membrane that allows it to thrive in a completely alien environment! What unique properties would it have? What materials would you use?" }
+        ];
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1: Recording Studio
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fillStyle = '#eee';
+                ctx.font = '40px Patrick Hand';
+                ctx.fillText("Mixing the next big Hit...", 800, 100);
+                drawStickFigure(300, 800, 'idle', 2, '#FF5733'); // Engineer 1
+                drawStickFigure(1600, 800, 'thinking', 2, '#3498DB'); //Musician
+                roughLine(200, 200, 400, 250, '#8E44AD');
+                roughLine(1500, 200, 1700, 250, '#F39C12');
+
+            } else if (time >= 5 && time < 10) {
+                // Scene 2: Cell Membrane as Gatekeeper
+                ctx.fillStyle = '#2ECC71';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 300, 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.font = '40px Patrick Hand';
+                ctx.fillText("The Cell Membrane: Gatekeeper", 700, 100);
+            } else if (time >= 10 && time < 20) {
+                // Scene 3: Phospholipid Bilayer
+                ctx.fillStyle = '#9B59B6';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                for (let i = 0; i < 50; i++) {
+                    let x = Math.random() * canvas.width;
+                    let y = Math.random() * canvas.height;
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(x, y, 20, 60);
+                }
+                ctx.fillStyle = '#fff';
+                ctx.font = '40px Patrick Hand';
+                ctx.fillText("Phospholipid Bilayer...", 700, 100);
+
+
+            } else if (time >= 20 && time < 30) {
+                // Scene 4: Ion and Molecule Transport
+                ctx.fillStyle = '#F1C40F';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fillStyle = 'rgba(0,0,0,0.5)'
+                ctx.fillRect(500,300, 900, 400);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '40px Patrick Hand';
+                ctx.fillText("Ion Transport...", 700, 100);
+
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(550 + (time-20)*70, 450, 20, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'blue';
+                ctx.beginPath();
+                ctx.arc(1350 - (time-20)*70, 550, 20, 0, 2 * Math.PI);
+                ctx.fill();
+            } else if (time >= 30 && time < 40) {
+                // Scene 5: Vibrant Cell Pulsating
+                ctx.fillStyle = '#1ABC9C';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fillStyle = 'rgba(255,255,255, 0.3)'
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 300, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = '40px Patrick Hand';
+                ctx.fillText("The Rhythm of Life...", 700, 100);
+
+
+            } else if (time >= 40 && time < 60) {
+                 // Scene 6: Futuristic Laboratory
+                 ctx.fillStyle = '#34495E';
+                 ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '40px Patrick Hand';
+                ctx.fillText("Design a NEW Cell!", 700, 100);
+                drawStickFigure(300, 800, 'thinking', 2, '#FF5733'); // Scientist 1
+                drawStickFigure(1600, 800, 'idle', 2, '#3498DB'); //Scientist 2
+                roughLine(200, 200, 400, 250, '#8E44AD');
+                roughLine(1500, 200, 1700, 250, '#F39C12');
+
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time) {
+                    subtitlesDiv.textContent = narration[i].text;
+                }
+            }
+        }
+
+        function updateTimeline(time) {
+            timeline.value = time;
+        }
+
+        function updateTimecodeDisplay() {
+            const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const durationMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const durationSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+        }
+
+        function animationLoop() {
+            const now = performance.now();
+            const dt = (now - startTime) / 1000;
+            startTime = now;
+
+            if (!paused) {
+                currentTime += dt;
+                if (currentTime > duration) {
+                    currentTime = 0;
+                }
+
+                renderScene(currentTime);
+                updateSubtitles(currentTime);
+                updateTimeline(currentTime);
+                updateTimecodeDisplay();
+            }
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        playPauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            playPauseBtn.textContent = paused ? 'Play' : 'Pause';
+        });
+
+        timeline.addEventListener('input', () => {
+            currentTime = parseFloat(timeline.value);
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimecodeDisplay();
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24); // 24 fps
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cell_membrane_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = 'Export Video';
+                isRecording = false;
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = 'Stop Export';
+            isRecording = true;
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+
+        startTime = performance.now();
+        animationLoop();
+    </script>
+</body>
+</html>

@@ -1,0 +1,467 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Pollination Explained</title>
+    <style>
+        body {
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #subtitles {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 24px;
+            text-align: center;
+            width: 80%;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        #playPauseButton, #exportButton {
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin: 0 10px;
+        }
+
+        #timecode {
+            font-size: 16px;
+            margin: 0 10px;
+        }
+
+        #timelineSlider {
+            width: 400px;
+            height: 8px;
+            cursor: pointer;
+            background: #ddd;
+            border-radius: 4px;
+            margin: 0 10px;
+        }
+
+        #durationSlider {
+            width: 100px;
+            margin: 0 10px;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <span id="timecode">00:00 / 00:00</span>
+            <input type="range" id="timelineSlider" min="0" max="30" value="0" step="0.01">
+            <input type="range" id="durationSlider" min="30" max="180" value="30" step="1">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let running = false;
+        let startTime;
+        let currentTime = 0;
+        let duration = 30;
+
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine a perfectly executed Hail Mary pass – the quarterback, like the wind, carrying something vital across the field." },
+            { time: 3, text: "That 'something' is like pollen, carrying life's blueprint to a new receiver, the flower's stigma." },
+            { time: 6, text: "Sunlight floods a vibrant green leaf, providing the initial energy for this natural play." },
+            { time: 9, text: "Deep inside, specialized cells convert light into fuel, initiating pollination's energy transfer." },
+            { time: 12, text: "Now, a bee, our star player, carries pollen like a winning football, strategically visiting different flowers." },
+            { time: 15, text: "Inside the flower, pollen reaches the ovule, triggering fertilization, the game-winning touchdown!" },
+            { time: 18, text: "Seeds develop, promising new life, ensuring plant populations continue like a legacy of championships." },
+            { time: 21, text: "Pollination's complex plays ensure the continuation of life on Earth..." },
+            { time: 24, text: "...so join the team, protect the pollinators, and help secure nature's future!" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 10; i++) {
+                const offsetX = Math.random() * 3 - 1.5;
+                const offsetY = Math.random() * 3 - 1.5;
+                ctx.moveTo(x1 + offsetX, y1 + offsetY);
+                ctx.lineTo(x2 + offsetX, y2 + offsetY);
+            }
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 0 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 0 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+
+                    // Thought bubble
+                    ctx.beginPath();
+                    ctx.arc(x - 50 * scale, y - 100 * scale, 15 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 120 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '24px Patrick Hand';
+            ctx.fillStyle = '#333';
+
+            if (time >= 0 && time < 3) {
+                // Scene 1
+                ctx.fillStyle = '#87ceeb';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 1: The Pass", 50, 50);
+                const footballX = 200 + time * 50;
+                const footballY = 300;
+                ctx.beginPath();
+                ctx.arc(footballX, footballY, 30, 0, 2 * Math.PI);
+                ctx.fillStyle = '#DEB887';
+                ctx.fill();
+                ctx.fillText("Football/Pollen", footballX - 30, footballY + 40);
+
+                const windStrength = time * 10;
+                for(let i = 0; i < windStrength; i++) {
+                    ctx.beginPath();
+                    ctx.arc(footballX + 50 + i*2, footballY + Math.sin(i)*20, 5, 0, 2*Math.PI)
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.5)"
+                    ctx.fill();
+                }
+            } else if (time >= 3 && time < 6) {
+                // Scene 2
+                ctx.fillStyle = '#90ee90';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 2: The Receiver", 50, 50);
+                const flowerX = 200;
+                const flowerY = 300;
+
+                //draw flower with stigma as receiver mitt
+                ctx.beginPath();
+                ctx.arc(flowerX, flowerY, 50, 0, Math.PI, true);
+                ctx.stroke();
+
+                //draw football
+                ctx.beginPath();
+                ctx.arc(flowerX + 100, flowerY, 20, 0, 2*Math.PI);
+                ctx.fillStyle = '#DEB887';
+                ctx.fill();
+            } else if (time >= 6 && time < 9) {
+                // Scene 3
+                ctx.fillStyle = '#adff2f';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 3: Sunlight Power", 50, 50);
+
+                //sun
+                ctx.beginPath();
+                ctx.arc(canvas.width - 100, 100, 50, 0, 2*Math.PI);
+                ctx.fillStyle = "yellow"
+                ctx.fill();
+
+                //leaf
+                ctx.beginPath();
+                ctx.ellipse(200, 300, 80, 40, 0, 0, 2*Math.PI);
+                ctx.fillStyle = "#008000"
+                ctx.fill();
+            } else if (time >= 9 && time < 12) {
+                // Scene 4
+                ctx.fillStyle = '#3cb371';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 4: Cellular Fuel", 50, 50);
+
+                //chloroplast
+                ctx.beginPath();
+                ctx.arc(200, 300, 40, 0, 2*Math.PI);
+                ctx.fillStyle = "green"
+                ctx.fill();
+            } else if (time >= 12 && time < 15) {
+                // Scene 5
+                ctx.fillStyle = '#dda0dd';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 5: Bee Delivery", 50, 50);
+
+                drawStickFigure(300, 300, 'running', 1, 'black')
+
+                //bee
+                ctx.beginPath();
+                ctx.ellipse(200, 300, 40, 20, 0, 0, 2*Math.PI);
+                ctx.fillStyle = "yellow"
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(200, 300, 40, 20, 0, 0, Math.PI);
+                ctx.stroke();
+            } else if (time >= 15 && time < 18) {
+                // Scene 6
+                ctx.fillStyle = '#f08080';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 6: Game Winning Touchdown", 50, 50);
+
+                //ovule animation
+                ctx.beginPath();
+                ctx.arc(200, 300, 40, 0, 2*Math.PI);
+                ctx.fillStyle = "white"
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(200, 300, 20, 0, 2*Math.PI);
+                ctx.fillStyle = "yellow"
+                ctx.fill();
+            } else if (time >= 18 && time < 21) {
+                // Scene 7
+                ctx.fillStyle = '#fa8072';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 7: Seed Development", 50, 50);
+
+                //seed animation
+                ctx.beginPath();
+                ctx.ellipse(200, 300, 40, 20, 0, 0, 2*Math.PI);
+                ctx.fillStyle = "brown"
+                ctx.fill();
+            } else if (time >= 21 && time < 24) {
+                // Scene 8
+                ctx.fillStyle = '#e9967a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 8: Life Continues", 50, 50);
+
+                drawStickFigure(300, 300, 'idle', 1, 'black')
+            }
+            else if (time >= 24 && time < 30) {
+                // Scene 9
+                ctx.fillStyle = '#cd853f';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Scene 9: Join the Team!", 50, 50);
+
+                drawStickFigure(300, 300, 'thinking', 1, 'black')
+            }
+
+            // Subtitle display
+            let currentSubtitle = narration.find(item => time >= item.time && time < item.time + 3);
+            if (currentSubtitle) {
+                subtitlesDiv.textContent = currentSubtitle.text;
+            } else {
+                subtitlesDiv.textContent = "";
+            }
+        }
+
+        function updateTimecode() {
+            const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const durationMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const durationSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+        }
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+                pauseAnimation();
+            }
+
+            renderScene(currentTime);
+            timelineSlider.value = currentTime;
+            updateTimecode();
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function playAnimation() {
+            if (!running) {
+                running = true;
+                startTime = null;
+                animationFrameId = requestAnimationFrame(animate);
+                playPauseButton.textContent = 'Pause';
+            }
+        }
+
+        function pauseAnimation() {
+            if (running) {
+                running = false;
+                cancelAnimationFrame(animationFrameId);
+                playPauseButton.textContent = 'Play';
+            }
+        }
+
+        playPauseButton.addEventListener('click', () => {
+            if (running) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        });
+
+        timelineSlider.addEventListener('input', () => {
+            currentTime = parseFloat(timelineSlider.value);
+            updateTimecode();
+            renderScene(currentTime);
+        });
+
+        durationSlider.addEventListener('input', () => {
+            duration = parseInt(durationSlider.value);
+            timelineSlider.max = duration;
+            updateTimecode();
+        });
+
+        exportButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                exportButton.textContent = "Export Video";
+            } else {
+                startRecording();
+                exportButton.textContent = "Stop Export";
+            }
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pollination_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+        }
+
+        // Initial setup
+        updateTimecode();
+        renderScene(0);
+    </script>
+</body>
+</html>

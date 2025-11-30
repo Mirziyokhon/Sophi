@@ -1,0 +1,366 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pollination Animation</title>
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #fffcf5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: 'Patrick Hand', cursive;
+}
+#container {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+}
+canvas {
+  background-color: #fffcf5;
+  display: block;
+}
+#subtitles {
+  position: absolute;
+  top: 900px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  text-align: center;
+  font-size: 32px;
+  color: #333;
+  z-index: 10;
+}
+#controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: rgba(200, 200, 200, 0.5);
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 10;
+}
+button {
+  padding: 5px 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+input[type=range] {
+  width: 300px;
+}
+#timecode {
+    font-size: 16px;
+}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="container">
+  <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+  <div id="subtitles"></div>
+  <div id="controls">
+    <button id="playPauseBtn">Play</button>
+    <input type="range" id="timelineSlider" min="0" max="30" value="0" step="0.01">
+    <span id="timecode">00:00 / 00:30</span>
+    <label for="durationSlider">Duration (s):</label>
+    <input type="range" id="durationSlider" min="30" max="180" value="30" step="1">
+    <button id="exportBtn">Export Video</button>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('animationCanvas');
+const ctx = canvas.getContext('2d');
+const subtitlesDiv = document.getElementById('subtitles');
+const playPauseBtn = document.getElementById('playPauseBtn');
+const timelineSlider = document.getElementById('timelineSlider');
+const timecodeDisplay = document.getElementById('timecode');
+const durationSlider = document.getElementById('durationSlider');
+const exportBtn = document.getElementById('exportBtn');
+
+let animationDuration = 30;
+let currentTime = 0;
+let isPlaying = false;
+let animationFrameId;
+
+let mediaRecorder;
+let recordedChunks = [];
+
+const narration = [
+  { time: 0, text: "Imagine a perfectly executed flea-flicker: precision passing and teamwork leading to a touchdown! That's like pollination, nature's incredible handoff." },
+  { time: 5, text: "Sunlight floods a flower's anther, releasing tiny pollen grains packed with genetic info." },
+  { time: 10, text: "A busy bee, buzzing like a wide receiver, carries that pollen like a football to another flower's stigma." },
+  { time: 15, text: "Inside, fertilization occurs, triggering seed development, just like scoring the winning points." },
+  { time: 20, text: "Pollination ensures our plants grow, providing the food that fuels us all!" },
+  { time: 25, text: "Now, let’s protect our vital pollinators: plant a bee-friendly garden and champion nature's MVPs!" }
+];
+
+function roughLine(x1, y1, x2, y2, color) {
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+  ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+  ctx.stroke();
+}
+
+function drawStickFigure(x, y, pose, scale, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 5;
+
+  switch (pose) {
+    case 'idle':
+      // Head
+      ctx.beginPath();
+      ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      // Body
+      roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+      // Arms
+      roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+      roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+      // Legs
+      roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+      roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+      break;
+
+    case 'thinking':
+          // Head
+        ctx.beginPath();
+        ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        // Body
+        roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+        // Arms (one on chin)
+        roughLine(x, y - 10 * scale, x - 30 * scale, y -20 * scale, color);
+        roughLine(x - 30*scale, y - 20 * scale, x, y-50*scale, color);
+
+        roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+        // Legs
+        roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+        roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+        break;
+    case 'running':
+      // Head
+      ctx.beginPath();
+      ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      // Body
+      roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+      // Arms
+      roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+      roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+      // Legs
+      roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+      roughLine(x, y + 50 * scale, x + 30 * scale, y + 120 * scale, color);
+      break;
+  }
+}
+
+function drawPollen(x, y) {
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = 'yellow';
+    ctx.fill();
+}
+
+function renderScene(time) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  let currentSubtitle = "";
+  for (let i = 0; i < narration.length; i++) {
+    if (time >= narration[i].time && time < (i < narration.length - 1 ? narration[i + 1].time : animationDuration)) {
+      currentSubtitle = narration[i].text;
+      break;
+    }
+  }
+  subtitlesDiv.textContent = currentSubtitle;
+
+  if (time >= 0 && time < 5) {
+    // Flea-flicker scene
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '80px Patrick Hand';
+    ctx.textAlign = 'center';
+    ctx.fillText('Football Field', canvas.width / 2, canvas.height / 2);
+  } else if (time >= 5 && time < 10) {
+    // Anther and pollen
+    ctx.fillStyle = '#FFC107';
+    ctx.beginPath();
+    ctx.ellipse(canvas.width / 2, canvas.height / 2, 100, 50, 0, 0, 2 * Math.PI);
+    ctx.fill();
+
+    for (let i = 0; i < 50; i++) {
+      drawPollen(canvas.width / 2 + Math.random() * 100 - 50, canvas.height / 2 + Math.random() * 100 - 50);
+    }
+
+  } else if (time >= 10 && time < 15) {
+    // Bee carrying pollen
+    ctx.fillStyle = '#fffcf5';
+    ctx.fillRect(0,0, canvas.width, canvas.height);
+    ctx.fillStyle = 'black';
+    ctx.font = '40px Patrick Hand';
+    ctx.fillText("Bee's Flight", canvas.width/2, 50);
+    drawStickFigure(canvas.width / 4, canvas.height / 2, 'running', 2, 'brown');
+
+    ctx.beginPath();
+    ctx.arc(canvas.width / 4 * 3, canvas.height / 2, 50, 0, 2 * Math.PI);
+    ctx.fillStyle = '#F0F';
+    ctx.fill();
+
+    for (let i = 0; i < 20; i++) {
+        drawPollen(canvas.width / 4 * 3 + Math.random() * 20 - 10, canvas.height / 2 + Math.random() * 20 - 10);
+    }
+
+  } else if (time >= 15 && time < 20) {
+    // Fertilization
+    ctx.fillStyle = '#E91E63';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '60px Patrick Hand';
+    ctx.textAlign = 'center';
+    ctx.fillText('Fertilization', canvas.width / 2, canvas.height / 2);
+  } else if (time >= 20 && time < 25) {
+    // Plant growth
+    ctx.fillStyle = '#689F38';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '60px Patrick Hand';
+    ctx.textAlign = 'center';
+    ctx.fillText('Plant Growing', canvas.width / 2, canvas.height / 2);
+  } else if (time >= 25 && time < 30) {
+    // Bee-friendly garden
+    ctx.fillStyle = '#8BC34A';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '60px Patrick Hand';
+    ctx.textAlign = 'center';
+    ctx.fillText('Bee Garden', canvas.width / 2, canvas.height / 2);
+
+    drawStickFigure(canvas.width / 3, canvas.height / 2, 'idle', 1.5, 'blue');
+  }
+
+}
+
+function updateTimecode() {
+  const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+  const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+  const durationMinutes = Math.floor(animationDuration / 60).toString().padStart(2, '0');
+  const durationSeconds = Math.floor(animationDuration % 60).toString().padStart(2, '0');
+  timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+}
+
+function animate(deltaTime) {
+    if (!isPlaying) return;
+    currentTime += deltaTime;
+    if (currentTime > animationDuration) {
+        currentTime = 0;
+        isPlaying = false;
+        playPauseBtn.textContent = 'Play';
+    }
+
+    timelineSlider.value = currentTime;
+    updateTimecode();
+    renderScene(currentTime);
+    animationFrameId = requestAnimationFrame(animate);
+}
+
+let lastTime = 0;
+function animationLoop(timestamp) {
+    const dt = (timestamp - lastTime) / 1000; // Convert ms to seconds
+    lastTime = timestamp;
+    animate(dt);
+}
+
+
+function playPause() {
+  isPlaying = !isPlaying;
+  playPauseBtn.textContent = isPlaying ? 'Pause' : 'Play';
+
+  if (isPlaying) {
+      lastTime = performance.now();
+      animationFrameId = requestAnimationFrame(animationLoop);
+  } else {
+    cancelAnimationFrame(animationFrameId);
+  }
+}
+
+function updateTimeline() {
+  currentTime = parseFloat(timelineSlider.value);
+  updateTimecode();
+  renderScene(currentTime);
+}
+
+function updateDuration() {
+  animationDuration = parseInt(durationSlider.value);
+  timelineSlider.max = animationDuration;
+  updateTimecode();
+}
+
+function startRecording() {
+  recordedChunks = [];
+  const stream = canvas.captureStream(24);
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+  mediaRecorder.ondataavailable = event => {
+    if (event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pollination_animation.webm';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    exportBtn.textContent = 'Export Video';
+  };
+
+  mediaRecorder.start();
+  exportBtn.textContent = 'Stop Export';
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+}
+
+function exportVideo() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+
+playPauseBtn.addEventListener('click', playPause);
+timelineSlider.addEventListener('input', updateTimeline);
+durationSlider.addEventListener('input', updateDuration);
+exportBtn.addEventListener('click', exportVideo);
+
+updateTimeline();
+updateDuration();
+</script>
+</body>
+</html>

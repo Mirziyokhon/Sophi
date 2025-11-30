@@ -1,0 +1,380 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afghanistan: A Tapestry of History</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333;
+            font-size: 32px;
+            text-align: center;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ccc;
+            margin: 10px auto;
+            cursor: pointer;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #3498db;
+            width: 0;
+        }
+
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        input[type=range] {
+          width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timelineSlider" min="0" max="100" value="0">
+            <span id="timecode">00:00 / 00:30</span>
+            <label for="durationSlider">Duration:</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let isPlaying = false;
+        let startTime;
+        let currentTime = 0;
+        let duration = 30;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine a tapestry woven with threads of vibrant color and ancient design – that's Afghanistan." },
+            { time: 5, text: "Its strategic location, a crossroads bordered by six nations, has made it a canvas for countless empires, each leaving its mark." },
+            { time: 10, text: "Persians, Soviets, and others have painted their stories onto this land, often in strokes of conflict." },
+            { time: 15, text: "Decades of war have defined its recent narrative, with the Taliban currently holding the brush." },
+            { time: 20, text: "Yet, the enduring spirit of its people shines through, a testament to resilience, revealing the complex interplay of history and geopolitics." },
+            { time: 25, text: "Study the art of its survival and let it inspire your own creative journey." }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 40 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 40 * scale, x - 20 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 40 * scale, x + 20 * scale, y + 80 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 40 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y - 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 40 * scale, x - 20 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 40 * scale, x + 20 * scale, y + 80 * scale, color);
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 40 * scale, color);
+
+                    // Arms
+                    roughLine(x, y - 10 * scale, x - 40 * scale, y, color);
+                    roughLine(x, y - 10 * scale, x + 40 * scale, y -20* scale, color);
+
+                    // Legs
+                    roughLine(x, y + 40 * scale, x - 30 * scale, y + 70 * scale, color);
+                    roughLine(x, y + 40 * scale, x + 30 * scale, y + 90 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#c0392b';
+                ctx.fillText("Afghanistan: A Woven History", 50, 100);
+
+                // Simplified rug representation
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillRect(100, 200, 400, 300);
+                ctx.fillStyle = '#f39c12';
+                ctx.fillRect(150, 250, 300, 200);
+                ctx.fillStyle = '#27ae60';
+                ctx.fillRect(200, 300, 200, 100);
+
+                drawStickFigure(1700, 800, 'idle', 2, '#34495e');
+            } else if (time >= 5 && time < 10) {
+                // Scene 2
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#2980b9';
+                ctx.fillText("The Crossroads of Empires", 50, 100);
+
+                // Simplified Map
+                ctx.fillStyle = '#3498db';
+                ctx.fillRect(700,200, 500,500);
+                ctx.fillStyle = '#2980b9';
+                ctx.fillRect(750,250, 400,400);
+
+                drawStickFigure(1700, 800, 'thinking', 2, '#34495e');
+
+            } else if (time >= 10 && time < 15) {
+                // Scene 3
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#8e44ad';
+                ctx.fillText("Painted in Strokes of Conflict", 50, 100);
+                drawStickFigure(1700, 800, 'idle', 2, '#34495e');
+                 ctx.fillStyle = '#9b59b6';
+                 ctx.fillRect(100,200, 200, 200);
+                 ctx.fillStyle = '#34495e';
+                 ctx.fillRect(400, 200, 200, 200);
+
+            } else if (time >= 15 && time < 20) {
+                // Scene 4
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#e67e22';
+                ctx.fillText("The Recent Narrative", 50, 100);
+                drawStickFigure(1700, 800, 'idle', 2, '#34495e');
+
+                 ctx.fillStyle = '#d35400';
+                 ctx.fillRect(100,200, 200, 200);
+                 ctx.fillStyle = '#7f8c8d';
+                 ctx.fillRect(400, 200, 200, 200);
+            } else if (time >= 20 && time < 25) {
+                // Scene 5
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#16a085';
+                ctx.fillText("The Enduring Spirit", 50, 100);
+                drawStickFigure(1700, 800, 'idle', 2, '#34495e');
+                 ctx.fillStyle = '#1abc9c';
+                 ctx.fillRect(100,200, 200, 200);
+                 ctx.fillStyle = '#2c3e50';
+                 ctx.fillRect(400, 200, 200, 200);
+            } else if (time >= 25 && time < 30) {
+                // Scene 6
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillText("Inspire Your Creative Journey", 50, 100);
+                drawStickFigure(1700, 800, 'running', 2, '#34495e');
+                 ctx.fillStyle = '#f39c12';
+                 ctx.fillRect(100,200, 200, 200);
+                 ctx.fillStyle = '#e74c3c';
+                 ctx.fillRect(400, 200, 200, 200);
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < (i < narration.length - 1 ? narration[i + 1].time : duration)) {
+                    subtitlesDiv.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitlesDiv.textContent = '';
+        }
+
+        function updateTimeline() {
+            const progress = (currentTime / duration) * 100;
+            timelineSlider.value = progress;
+            const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const durationMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const durationSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+        }
+
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+                isPlaying = false;
+                playPauseBtn.textContent = 'Play';
+            }
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline();
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function playPause() {
+            if (isPlaying) {
+                cancelAnimationFrame(animationFrameId);
+                isPlaying = false;
+                playPauseBtn.textContent = 'Play';
+            } else {
+                startTime = null;
+                isPlaying = true;
+                playPauseBtn.textContent = 'Pause';
+                animationLoop();
+            }
+        }
+
+        function seekTimeline() {
+            const seekTime = (timelineSlider.value / 100) * duration;
+            currentTime = seekTime;
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline();
+        }
+
+        function changeDuration() {
+            duration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline();
+        }
+
+        function exportVideo() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                exportBtn.textContent = "Export Video";
+            } else {
+                recordedChunks = [];
+                const stream = canvas.captureStream(24);
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'animation.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+
+                mediaRecorder.start();
+                exportBtn.textContent = "Stop Export";
+            }
+        }
+
+        playPauseBtn.addEventListener('click', playPause);
+        timelineSlider.addEventListener('input', seekTimeline);
+        durationSlider.addEventListener('input', changeDuration);
+        exportBtn.addEventListener('click', exportVideo);
+
+        updateTimeline();
+    </script>
+</body>
+</html>

@@ -1,0 +1,408 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Germination Animation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+            z-index: 2;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(200, 200, 200, 0.5);
+            padding: 10px;
+            text-align: center;
+            z-index: 3;
+        }
+
+        #timeline {
+            width: 60%;
+            margin: 5px;
+        }
+
+        #durationSlider {
+            width: 20%;
+            margin: 5px;
+        }
+
+        #exportButton {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        #timecode {
+            margin: 5px;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <input type="range" id="timeline" value="0" step="0.01">
+            <span id="timecode">00:00 / 00:00</span>
+            <input type="range" id="durationSlider" min="30" max="180" value="60">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timeline = document.getElementById('timeline');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let isPlaying = true;
+        let startTime;
+        let currentTime = 0;
+        let duration = 60;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        const narration = [
+            { time: 0, text: "Imagine a football team huddled together, strategizing their next play—that huddle is like a seed holding incredible potential." },
+            { time: 5, text: "But even the best game plan needs the right conditions to succeed, just like a seed needs the right environment to germinate. Germination is the amazing process where a tiny seed wakes up and starts growing into a plant." },
+            { time: 10, text: "First, the seed soaks up water like a sponge absorbing sweat on the field, causing it to swell and crack open its protective coat." },
+            { time: 15, text: "Oxygen then rushes in, fueling the seed with the energy it needs to push out its first root, called the radicle." },
+            { time: 20, text: "Next, a tiny sprout, or plumule, emerges, reaching for the sunlight to begin its journey." },
+            { time: 25, text: "Inside the seed, stored food reserves are broken down, providing fuel for this incredible growth spurt." },
+            { time: 30, text: "Different seeds, like different players with unique skills, have different needs for light, water, and temperature to thrive." },
+            { time: 35, text: "Understanding germination is like knowing the playbook for plant life;" },
+            { time: 40, text: "with the right conditions, you can bring life to seeds and watch them grow into something amazing!" },
+            { time: 45, text: "This seedling uses sunlight to grow and thrive." },
+            { time: 50, text: "Like our plant, we all need specific conditions to thrive!" },
+            { time: 55, text: "Keep learning and growing! Seeds of knowledge await!" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            let wobbleX = 5;
+            let wobbleY = 5;
+            let steps = 10;
+
+            let x = x1;
+            let y = y1;
+
+            ctx.moveTo(x, y);
+
+            for (let i = 0; i < steps; i++) {
+                let dx = (x2 - x1) / steps;
+                let dy = (y2 - y1) / steps;
+
+                x += dx + Math.random() * wobbleX - wobbleX / 2;
+                y += dy + Math.random() * wobbleY - wobbleY / 2;
+
+                ctx.lineTo(x, y);
+            }
+
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.lineWidth = 3 * scale;
+            ctx.strokeStyle = color;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+                roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                roughLine(x, y, x + 30 * scale, y - 20 * scale, color);
+            } else if (pose === 'thinking') {
+                roughLine(x, y, x - 20 * scale, y - 20 * scale, color);
+                roughLine(x, y, x + 20 * scale, y - 20 * scale, color);
+            } else { // idle
+                roughLine(x, y, x - 30 * scale, y, color);
+                roughLine(x, y, x + 30 * scale, y, color);
+            }
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 80 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 70 * scale, color);
+            } else {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 80 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 80 * scale, color);
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1
+                ctx.fillStyle = '#f0d0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Seed Potential', 100, 100);
+                drawStickFigure(300, 500, 'idle', 2, 'green');
+                drawStickFigure(1600, 500, 'idle', 2, 'green');
+            } else if (time >= 5 && time < 10) {
+                // Scene 2
+                ctx.fillStyle = '#a0d0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Germination Begins', 100, 100);
+                drawStickFigure(300, 500, 'thinking', 2, 'blue');
+                drawStickFigure(1600, 500, 'thinking', 2, 'blue');
+            } else if (time >= 10 && time < 15) {
+                // Scene 3
+                ctx.fillStyle = '#d0f0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Water Absorption', 100, 100);
+                drawStickFigure(300, 500, 'idle', 2, 'purple');
+                drawStickFigure(1600, 500, 'idle', 2, 'purple');
+            } else if (time >= 15 && time < 20) {
+                // Scene 4
+                ctx.fillStyle = '#f0a0d0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Oxygen Intake', 100, 100);
+                drawStickFigure(300, 500, 'running', 2, 'red');
+                drawStickFigure(1600, 500, 'running', 2, 'red');
+            } else if (time >= 20 && time < 25) {
+                // Scene 5
+                ctx.fillStyle = '#a0a0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Plumule Emerges', 100, 100);
+                 drawStickFigure(300, 500, 'running', 2, 'orange');
+                drawStickFigure(1600, 500, 'running', 2, 'orange');
+            } else if (time >= 25 && time < 30) {
+                // Scene 6
+                ctx.fillStyle = '#d0a0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Food Reserves', 100, 100);
+                 drawStickFigure(300, 500, 'thinking', 2, 'yellow');
+                drawStickFigure(1600, 500, 'thinking', 2, 'yellow');
+            } else if (time >= 30 && time < 35) {
+                // Scene 7
+                ctx.fillStyle = '#f0f0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Different Needs', 100, 100);
+                drawStickFigure(300, 500, 'idle', 2, 'gray');
+                drawStickFigure(1600, 500, 'idle', 2, 'gray');
+            } else if (time >= 35 && time < 40) {
+                // Scene 8
+                ctx.fillStyle = '#a0f0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Playbook of Life', 100, 100);
+                drawStickFigure(300, 500, 'thinking', 2, 'brown');
+                drawStickFigure(1600, 500, 'thinking', 2, 'brown');
+            } else if (time >= 40 && time < 45) {
+                // Scene 9
+                ctx.fillStyle = '#f0a0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.fillText('Amazing Growth', 100, 100);
+                drawStickFigure(300, 500, 'running', 2, 'pink');
+                drawStickFigure(1600, 500, 'running', 2, 'pink');
+            } else if (time >= 45 && time < 50) {
+                  ctx.fillStyle = '#c0c0c0';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.font = '48px Patrick Hand';
+                  ctx.fillStyle = '#333';
+                  ctx.fillText('Sunlight Power', 100, 100);
+                   drawStickFigure(300, 500, 'idle', 2, 'lime');
+                  drawStickFigure(1600, 500, 'idle', 2, 'lime');
+
+            } else if (time >= 50 && time < 55) {
+                  ctx.fillStyle = '#e0e0e0';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.font = '48px Patrick Hand';
+                  ctx.fillStyle = '#333';
+                  ctx.fillText('Conditions To Thrive', 100, 100);
+                   drawStickFigure(300, 500, 'thinking', 2, 'teal');
+                  drawStickFigure(1600, 500, 'thinking', 2, 'teal');
+            } else if (time >= 55 && time < 60) {
+                  ctx.fillStyle = '#fff0f5';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.font = '48px Patrick Hand';
+                  ctx.fillStyle = '#333';
+                  ctx.fillText('Seeds of Knowledge', 100, 100);
+                   drawStickFigure(300, 500, 'idle', 2, 'maroon');
+                  drawStickFigure(1600, 500, 'idle', 2, 'maroon');
+            }
+        }
+
+        function updateSubtitles(time) {
+            const subtitle = narration.find(item => time >= item.time && time < item.time + 5);
+            subtitlesDiv.textContent = subtitle ? subtitle.text : '';
+        }
+
+        function updateTimecode() {
+            const currentTimeFormatted = formatTime(currentTime);
+            const durationFormatted = formatTime(duration);
+            timecodeDisplay.textContent = `${currentTimeFormatted} / ${durationFormatted}`;
+        }
+
+        function formatTime(time) {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+                isPlaying = false;
+                playPauseButton.textContent = 'Play';
+            }
+
+            timeline.value = currentTime;
+            updateTimecode();
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function playPause() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playPauseButton.textContent = 'Pause';
+                startTime = performance.now() - (currentTime * 1000); // Adjust start time
+                animationLoop(performance.now());
+            } else {
+                playPauseButton.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function seek() {
+            currentTime = parseFloat(timeline.value);
+            updateTimecode();
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+        }
+
+        function changeDuration() {
+            duration = parseInt(durationSlider.value);
+            timeline.max = duration;
+            updateTimecode();
+        }
+
+        function exportVideo() {
+            if (!isRecording) {
+                recordedChunks = [];
+                const stream = canvas.captureStream(24);
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'germination_animation.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    exportButton.textContent = 'Export Video';
+                    isRecording = false;
+                };
+
+                mediaRecorder.start();
+                exportButton.textContent = 'Stop Export';
+                isRecording = true;
+            } else {
+                mediaRecorder.stop();
+            }
+        }
+
+        playPauseButton.addEventListener('click', playPause);
+        timeline.addEventListener('input', seek);
+        durationSlider.addEventListener('input', changeDuration);
+        exportButton.addEventListener('click', exportVideo);
+
+        timeline.max = duration;
+        updateTimecode();
+        animationLoop(0);
+    </script>
+</body>
+</html>

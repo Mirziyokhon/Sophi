@@ -1,0 +1,432 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uzbek Youth & Gig Economy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ddd;
+            margin: 5px auto;
+            cursor: pointer;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #4CAF50;
+            width: 0;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+
+        input[type=range] {
+          width: 20%;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timelineSlider" min="0" max="100" value="0">
+            <span id="timecode">00:00 / 00:30</span>
+            <label for="durationSlider">Duration:</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationDuration = 30;
+        let currentTime = 0;
+        let isPlaying = true;
+        let animationFrameId;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        // Narration array with timestamps (seconds)
+        const narration = [
+            { time: 0, text: "Imagine the intricate detail of an Uzbek tile, each piece carefully placed. Now, picture those vibrant colors fading into the twilight of a Tashkent night." },
+            { time: 5, text: "That's when a different kind of art unfolds: the logistics gig economy, promising quick wealth. But these are young artists, architects, and innovators trading their dreams for dollars." },
+            { time: 10, text: "They're working demanding night shifts, sacrificing sleep and studies, risking their health." },
+            { time: 15, text: "The question is: are we trading future masterpieces for present-day practicality?" },
+            { time: 20, text: "Is the allure of quick money obscuring the potential brilliance of Uzbekistan's youth?" },
+            { time: 25, text: "Let's reimagine the canvas of their lives, investing in education and sustainable opportunities that allow them to create a brighter, more colorful future for themselves and their nation." }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+
+          // Head
+          ctx.arc(x, y - 60 * scale, 20 * scale, 0, 2 * Math.PI);
+
+          // Body
+          ctx.moveTo(x, y - 40 * scale);
+          ctx.lineTo(x, y + 40 * scale);
+
+          if (pose === "idle") {
+              // Arms (idle)
+              ctx.moveTo(x, y);
+              ctx.lineTo(x - 30 * scale, y + 20 * scale);
+              ctx.moveTo(x, y);
+              ctx.lineTo(x + 30 * scale, y + 20 * scale);
+              // Legs (idle)
+              ctx.moveTo(x, y + 40 * scale);
+              ctx.lineTo(x - 20 * scale, y + 80 * scale);
+              ctx.moveTo(x, y + 40 * scale);
+              ctx.lineTo(x + 20 * scale, y + 80 * scale);
+          } else if (pose === "thinking") {
+              // Arms (thinking)
+              ctx.moveTo(x, y);
+              ctx.lineTo(x - 30 * scale, y - 20 * scale);
+              ctx.moveTo(x, y);
+              ctx.lineTo(x + 30 * scale, y - 20 * scale);
+              // Legs (thinking)
+              ctx.moveTo(x, y + 40 * scale);
+              ctx.lineTo(x - 10 * scale, y + 70 * scale);
+              ctx.moveTo(x, y + 40 * scale);
+              ctx.lineTo(x + 10 * scale, y + 70 * scale);
+          } else if (pose === "running") {
+              // Arms (running)
+              ctx.moveTo(x, y);
+              ctx.lineTo(x - 40 * scale, y - 10 * scale);
+              ctx.moveTo(x, y);
+              ctx.lineTo(x + 40 * scale, y + 10 * scale);
+              // Legs (running)
+              ctx.moveTo(x, y + 40 * scale);
+              ctx.lineTo(x - 30 * scale, y + 90 * scale);
+              ctx.moveTo(x, y + 40 * scale);
+              ctx.lineTo(x + 30 * scale, y + 50 * scale);
+          }
+
+          ctx.stroke();
+      }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+              // Scene 1
+              ctx.fillStyle = '#4a4a4a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+              // Draw a geometric pattern reminiscent of Uzbek tiles
+                const tileColor1 = '#ffc107'; // Amber
+                const tileColor2 = '#2196f3'; // Blue
+                const tileColor3 = '#4caf50'; // Green
+
+                const tileSize = 80;
+                for (let x = 0; x < canvas.width; x += tileSize) {
+                    for (let y = 0; y < canvas.height; y += tileSize) {
+                        ctx.fillStyle = tileColor1;
+                        ctx.fillRect(x, y, tileSize / 2, tileSize / 2);
+                        ctx.fillStyle = tileColor2;
+                        ctx.fillRect(x + tileSize / 2, y, tileSize / 2, tileSize / 2);
+                        ctx.fillStyle = tileColor3;
+                        ctx.fillRect(x, y + tileSize / 2, tileSize / 2, tileSize / 2);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(x + tileSize / 2, y + tileSize / 2, tileSize / 2, tileSize / 2);
+
+                    }
+                }
+            } else if (time >= 5 && time < 10) {
+                // Scene 2
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Night sky with stars
+                ctx.fillStyle = '#fff';
+                for (let i = 0; i < 200; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const size = Math.random() * 3;
+                    ctx.fillRect(x, y, size, size);
+                }
+
+                // Scooters with delivery bags (simplified)
+                for (let i = 0; i < 3; i++) {
+                    const x = 200 + i * 400;
+                    const y = 700;
+                    ctx.fillStyle = '#ffcc00';
+                    ctx.fillRect(x, y, 80, 40); // Scooter body
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(x + 20, y - 60, 40, 60); // Delivery bag
+                    ctx.fillStyle = '#fff';
+                    ctx.font = "20px Patrick Hand";
+                    ctx.fillText("US Co", x+22, y-30);
+
+                }
+                drawStickFigure(1700, 700, "running", 1.2, 'white');
+
+
+            } else if (time >= 10 && time < 15) {
+                // Scene 3
+                ctx.fillStyle = '#333';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Split screen
+                ctx.fillStyle = '#666';
+                ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+                ctx.fillStyle = '#999';
+                ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+
+                // Delivery person (left side)
+                drawStickFigure(canvas.width / 4, 700, "idle", 1.5, 'yellow');
+
+                // Book on desk (right side)
+                ctx.fillStyle = '#ddd';
+                ctx.fillRect(canvas.width * 3 / 4 - 50, 650, 100, 60);
+                ctx.fillStyle = '#000';
+                ctx.font = "20px Patrick Hand";
+                ctx.fillText("Textbook", canvas.width * 3 / 4 - 30, 680);
+            } else if (time >= 15 && time < 20) {
+                // Scene 4
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Hand dropping money
+                ctx.fillStyle = '#888';
+                ctx.fillRect(800, 300, 150, 75);
+                ctx.fillStyle = 'gold';
+                ctx.font = "30px Patrick Hand";
+                ctx.fillText("UZS", 830, 350);
+
+                // Canvas with painting
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(1200, 400, 300, 200);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(1220, 420, 50, 50);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(1300, 480, 50, 50);
+            } else if (time >= 20 && time < 25) {
+                // Scene 5
+                ctx.fillStyle = '#111';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Silhouette
+                ctx.fillStyle = '#fff';
+                drawStickFigure(500, 700, "thinking", 1.5, 'grey');
+
+                // Building
+                ctx.fillStyle = '#ffc';
+                ctx.fillRect(1200, 500, 400, 300);
+                ctx.fillStyle = '#000';
+                ctx.font = "40px Patrick Hand";
+                ctx.fillText("Uni", 1350, 600);
+
+                 //Scooter Lights
+                for (let i = 0; i < 4; i++) {
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(100 + i * 100, 900, 50, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                }
+
+            } else if (time >= 25 && time <= 30) {
+                // Scene 6
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // More vibrant painting
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(300, 400, 400, 300);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(320, 420, 80, 80);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(400, 500, 80, 80);
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(500, 450, 80, 80);
+
+                // Students collaborating
+                drawStickFigure(1200, 700, "idle", 1, 'black');
+                drawStickFigure(1400, 700, "idle", 1, 'blue');
+                drawStickFigure(1600, 700, "idle", 1, 'red');
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < (i < narration.length - 1 ? narration[i + 1].time : animationDuration)) {
+                    subtitlesDiv.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitlesDiv.textContent = '';
+        }
+
+        function updateTimeline() {
+            const progress = (currentTime / animationDuration) * 100;
+            timelineSlider.value = progress;
+            const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const totalMinutes = Math.floor(animationDuration / 60).toString().padStart(2, '0');
+            const totalSeconds = Math.floor(animationDuration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${totalMinutes}:${totalSeconds}`;
+        }
+
+        function animate(dt) {
+            if (!isPlaying) return;
+            currentTime += dt;
+            if (currentTime > animationDuration) {
+                currentTime = 0;
+                isPlaying = false;
+                playPauseBtn.textContent = 'Play';
+            }
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline();
+        }
+
+        let lastTime = 0;
+        function animationLoop(time) {
+            const dt = (time - lastTime) / 1000; // Convert to seconds
+            lastTime = time;
+            animate(dt);
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            playPauseBtn.textContent = isPlaying ? 'Pause' : 'Play';
+            if (isPlaying) {
+                lastTime = performance.now(); // Reset lastTime when resuming
+                animationLoop(lastTime);
+            } else {
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function seekTimeline() {
+            const seekTime = (timelineSlider.value / 100) * animationDuration;
+            currentTime = seekTime;
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline();
+        }
+
+        function changeDuration() {
+            animationDuration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline();
+        }
+
+        function exportVideo() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                exportBtn.textContent = "Export Video";
+            } else {
+                recordedChunks = [];
+                const stream = canvas.captureStream(24);
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'animation.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+
+                mediaRecorder.start();
+                exportBtn.textContent = "Stop Export";
+            }
+        }
+
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        timelineSlider.addEventListener('input', seekTimeline);
+        durationSlider.addEventListener('input', changeDuration);
+        exportBtn.addEventListener('click', exportVideo);
+
+        // Initial setup
+        updateTimeline();
+        renderScene(0);
+        animationLoop(0);
+    </script>
+</body>
+</html>

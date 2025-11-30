@@ -1,0 +1,528 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Cell Membrane: An Artistic View</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            background-color: #fffcf5;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 880px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #3498db;
+            width: 0;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        input[type=range] {
+          width: 100px;
+        }
+
+        #exportButton {
+            margin-left: 20px; /* Add some spacing */
+        }
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <span id="timecode">00:00 / 00:00</span>
+            <div id="timeline">
+                <div id="timeline-progress"></div>
+            </div>
+            <label for="duration">Duration (s):</label>
+            <input type="range" id="duration" min="30" max="180" value="60">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timecodeDisplay = document.getElementById('timecode');
+        const timeline = document.getElementById('timeline');
+        const timelineProgress = document.getElementById('timeline-progress');
+        const durationInput = document.getElementById('duration');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let startTime;
+        let paused = true;
+        let currentTime = 0;
+        let duration = parseInt(durationInput.value);
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        // Narration data
+        const narration = [
+            { time: 0, text: "Imagine a grand gallery, but instead of paintings, there are living, breathing works of art: cells!" },
+            { time: 5, text: "Each one a tiny masterpiece of biological engineering. The canvas of each cell is called the cell membrane, a shimmering barrier that defines its boundaries." },
+            { time: 10, text: "It's primarily crafted from phospholipids, like tiny building blocks, intermingled with proteins that act like sculpted doorways." },
+            { time: 15, text: "These protein doorways are integral proteins that precisely control the cell's supplies, selectively allowing molecules to pass through." },
+            { time: 20, text: "Like a careful curator, it regulates the movement of substances, permitting entry to essential nutrients while expelling waste materials." },
+            { time: 25, text: "The membrane is also crucial for cell adhesion, allowing cells to connect and form complex tissues, like brushstrokes forming a beautiful composition." },
+            { time: 30, text: "It even participates in cell signaling, transmitting messages that coordinate cellular activities, like conducting an orchestra of life." },
+            { time: 35, text: "So, embrace this knowledge and let the cell membrane inspire your art." },
+            { time: 40, text: "Imagine the colors, textures, and structures you can create based on this intricate cellular gatekeeper!" }
+        ];
+
+        // Utility functions
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.strokeStyle = color;
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 30 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 30 * scale, x - 20 * scale, y + 60 * scale, color);
+                    roughLine(x, y + 30 * scale, x + 20 * scale, y + 60 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 30 * scale, color);
+
+                    // Arms (one on chin)
+                    roughLine(x, y, x - 10 * scale, y - 20 * scale, color);
+                    roughLine(x - 10 * scale, y - 20 * scale, x - 20 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 30 * scale, x - 20 * scale, y + 60 * scale, color);
+                    roughLine(x, y + 30 * scale, x + 20 * scale, y + 60 * scale, color);
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body (leaning forward)
+                    roughLine(x, y - 30 * scale, x + 10 * scale, y + 30 * scale, color);
+
+                    // Arms
+                    roughLine(x + 10 * scale, y, x - 20 * scale, y - 10 * scale, color);
+                    roughLine(x + 10 * scale, y, x + 40 * scale, y - 10 * scale, color);
+
+                    // Legs
+                    roughLine(x + 10 * scale, y + 30 * scale, x - 10 * scale, y + 60 * scale, color);
+                    roughLine(x + 10 * scale, y + 30 * scale, x + 30 * scale, y + 50 * scale, color);
+                    break;
+            }
+        }
+
+
+        // Animation loop
+        let dt = 0;
+        let lastTime = 0;
+
+        function animationLoop(timestamp) {
+            dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            if (!paused) {
+                currentTime += dt;
+                if (currentTime > duration) {
+                    currentTime = 0;
+                }
+            }
+
+            renderScene(currentTime);
+            updateUI(currentTime);
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            //Scene 1: Microscopic Landscape
+            if (time >= 0 && time < 5) {
+                ctx.fillStyle = '#e0f7fa';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Draw some cells as art
+                drawArtisticCell(200, 300, '#ffab40');
+                drawArtisticCell(500, 400, '#4db6ac');
+                drawArtisticCell(800, 250, '#f44336');
+                drawArtisticCell(1100, 450, '#9575cd');
+                drawArtisticCell(1400, 350, '#64b5f6');
+                drawArtisticCell(1700, 400, '#81c784');
+            }
+             //Scene 2: Rotating plant cell
+            else if (time >= 5 && time < 10) {
+                ctx.fillStyle = '#dcedc8';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawRotatingCell(canvas.width / 2, canvas.height / 2, time);
+            }
+
+            //Scene 3: Phospholipid Bilayer
+            else if (time >= 10 && time < 15) {
+                ctx.fillStyle = '#fff9c4';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawPhospholipidBilayer(canvas.width / 2, canvas.height / 2);
+            }
+
+            //Scene 4: Integral Protein
+            else if (time >= 15 && time < 20) {
+                ctx.fillStyle = '#ffecb3';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawIntegralProtein(canvas.width / 2, canvas.height / 2, time);
+            }
+
+            //Scene 5: Nutrient and Waste Transport
+            else if (time >= 20 && time < 25) {
+                ctx.fillStyle = '#e1bee7';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawNutrientWasteTransport(canvas.width / 2, canvas.height / 2, time);
+            }
+            //Scene 6: Cell Adhesion
+            else if (time >= 25 && time < 30) {
+                ctx.fillStyle = '#c5cae9';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawCellAdhesion(canvas.width / 2, canvas.height / 2);
+            }
+
+            //Scene 7: Cell Signaling
+            else if (time >= 30 && time < 35) {
+                ctx.fillStyle = '#bbdefb';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawCellSignaling(canvas.width / 2, canvas.height / 2, time);
+            }
+
+            //Scene 8: Inspiration
+            else if (time >= 35 && time < 40) {
+                ctx.fillStyle = '#b2ebf2';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawInspiration(canvas.width / 2, canvas.height / 2);
+            }
+
+            //Scene 9: Art Montage
+            else if (time >= 40 && time <= duration) {
+                ctx.fillStyle = '#b2dfdb';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawArtMontage(time);
+                if(time > 40){
+                   drawStickFigure(canvas.width * 0.9, canvas.height * 0.8, 'idle', 1, 'black')
+                }
+
+            }
+        }
+
+        function drawArtisticCell(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, 50, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawRotatingCell(x, y, time) {
+          const radius = 100;
+          const rotationAngle = time * 0.5;
+          const membraneColor = `hsl(${time * 10 % 360}, 100%, 50%)`;
+
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = membraneColor;
+          ctx.fill();
+          ctx.closePath();
+        }
+
+
+        function drawPhospholipidBilayer(x, y) {
+            const phospholipidWidth = 30;
+            const phospholipidHeight = 50;
+            const numPhospholipids = 30;
+
+            for (let i = 0; i < numPhospholipids; i++) {
+                const angle = (i / numPhospholipids) * 2 * Math.PI;
+                const xPos = x + Math.cos(angle) * 150;
+                const yPos = y + Math.sin(angle) * 80;
+
+                // Draw phospholipid head
+                ctx.fillStyle = '#f06292';
+                ctx.beginPath();
+                ctx.arc(xPos, yPos, 10, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Draw phospholipid tails
+                ctx.strokeStyle = '#424242';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(xPos, yPos);
+                ctx.lineTo(xPos - 20, yPos + 30);
+                ctx.moveTo(xPos, yPos);
+                ctx.lineTo(xPos + 20, yPos + 30);
+                ctx.stroke();
+            }
+        }
+
+        function drawIntegralProtein(x, y, time) {
+            // Draw the protein body
+            ctx.fillStyle = '#7986cb';
+            ctx.fillRect(x - 40, y - 60, 80, 120);
+
+            // Draw the channel
+            ctx.fillStyle = '#fff';
+            const channelWidth = 10;
+            const channelHeight = 80;
+            const channelY = y - 40 + Math.sin(time) * 10; // Make the channel move slightly
+            ctx.fillRect(x - channelWidth / 2, channelY, channelWidth, channelHeight);
+
+            // Draw molecule passing through (simplified)
+            const moleculeSize = 8;
+            const moleculeY = channelY + channelHeight / 2;
+            ctx.fillStyle = '#4caf50';
+            ctx.beginPath();
+            ctx.arc(x, moleculeY, moleculeSize, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawNutrientWasteTransport(x, y, time) {
+            const nutrientSize = 15;
+            const wasteSize = 12;
+
+            // Draw nutrients entering
+            ctx.fillStyle = 'green';
+            ctx.beginPath();
+            ctx.arc(x - 100 + Math.sin(time * 2) * 50, y, nutrientSize, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Draw wastes exiting
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(x + 100 - Math.sin(time * 2) * 50, y, wasteSize, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawCellAdhesion(x, y) {
+            // Draw two cells
+            ctx.fillStyle = 'lightblue';
+            ctx.beginPath();
+            ctx.arc(x - 150, y, 80, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x + 150, y, 80, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Draw adhesion proteins (simplified)
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(x - 70, y);
+            ctx.lineTo(x + 70, y);
+            ctx.stroke();
+        }
+
+        function drawCellSignaling(x, y, time) {
+           const signalOffset = Math.sin(time * 2) * 30;
+           ctx.fillStyle = 'orange';
+           ctx.beginPath();
+           ctx.arc(x, y + signalOffset, 25, 0, 2 * Math.PI);
+           ctx.fill();
+        }
+
+        function drawInspiration(x, y) {
+            ctx.fillStyle = 'purple';
+            ctx.beginPath();
+            ctx.arc(x - 200, y, 50, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.fillStyle = 'yellow';
+            ctx.beginPath();
+            ctx.arc(x + 200, y, 50, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawArtMontage(time) {
+          // Use time to cycle through different art styles or images
+          const artStyles = ['abstract', 'impressionism', 'pop art'];
+          const currentStyleIndex = Math.floor((time - 40) / 3) % artStyles.length;
+
+          ctx.font = '48px Patrick Hand';
+          ctx.fillStyle = 'black';
+          ctx.fillText(`Style: ${artStyles[currentStyleIndex]}`, 100, 100);
+        }
+
+
+        // UI update function
+        function updateUI(time) {
+            const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+            const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+            const totalMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const totalSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${minutes}:${seconds} / ${totalMinutes}:${totalSeconds}`;
+
+            timelineProgress.style.width = (time / duration) * 100 + '%';
+
+            // Update subtitles
+            let currentSubtitle = '';
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time) {
+                    currentSubtitle = narration[i].text;
+                }
+            }
+            subtitlesDiv.textContent = currentSubtitle;
+        }
+
+        // Control event listeners
+        playPauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            playPauseBtn.textContent = paused ? 'Play' : 'Pause';
+            if (!paused) {
+                startTime = performance.now() - (currentTime * 1000);
+                animationLoop(startTime);
+            }
+        });
+
+        timeline.addEventListener('click', (e) => {
+            const rect = timeline.getBoundingClientRect();
+            const clickedPosition = (e.clientX - rect.left) / rect.width;
+            currentTime = clickedPosition * duration;
+            updateUI(currentTime);
+            renderScene(currentTime);
+        });
+
+        durationInput.addEventListener('input', () => {
+            duration = parseInt(durationInput.value);
+            currentTime = 0;
+            updateUI(currentTime);
+            renderScene(currentTime);
+        });
+
+        exportButton.addEventListener('click', async () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                exportButton.textContent = 'Export Video';
+            } else {
+                recordedChunks = [];
+                const stream = canvas.captureStream(24); // 24 FPS
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'cell_membrane_art.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+
+                mediaRecorder.start();
+                exportButton.textContent = 'Stop Export';
+            }
+        });
+
+        // Initial setup
+        animationLoop(0);
+    </script>
+</body>
+</html>

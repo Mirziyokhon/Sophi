@@ -1,0 +1,438 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Germination: A Seed's Big Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            background-color: #fffcf5;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 880px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1800px;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+            padding: 10px;
+            background-color: rgba(255, 252, 245, 0.8);
+            border-radius: 5px;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #playPauseButton {
+            font-size: 24px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        #timeline {
+            width: 600px;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        #timelineBar {
+            height: 10px;
+            background-color: #4CAF50;
+            width: 0;
+        }
+
+        #timecode {
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        #durationSlider {
+            width: 200px;
+            margin-right: 10px;
+        }
+
+        #exportButton {
+            font-size: 24px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <div id="timeline">
+                <div id="timelineBar"></div>
+            </div>
+            <div id="timecode">00:00 / 00:00</div>
+            <input type="range" id="durationSlider" min="30" max="180" value="60">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timeline = document.getElementById('timeline');
+        const timelineBar = document.getElementById('timelineBar');
+        const timecodeDiv = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let isPlaying = true;
+        let currentTime = 0;
+        let duration = parseInt(durationSlider.value);
+        let startTime = null;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        const narration = [
+            { time: 0, text: "It's fourth down, two yards to go, and your team's season is on the line. Just like a football team needs the right conditions to execute the perfect play, a tiny seed needs the right conditions to sprout." },
+            { time: 5, text: "Imagine that seed as a dormant player, waiting for the signal to come alive." },
+            { time: 10, text: "First, water floods the seed, hydrating it like Gatorade fuels a runner, kickstarting its internal engine and waking up the dormant embryo." },
+            { time: 15, text: "Oxygen then rushes in, providing the energy it needs to perform, like a quarterback needs air to breathe during a game-winning drive." },
+            { time: 20, text: "Inside, stored food reserves, like a pre-game meal, break down to fuel the growing root and shoot." },
+            { time: 25, text: "Even disturbance, like a perfectly timed fumble recovery, can bring a buried seed to the surface, giving it a better chance to grow." },
+            { time: 30, text: "So, remember, that seed is a sleeping giant, a tiny plant waiting for its moment, for the right conditions to rise and win." },
+            { time: 35, text: "Just like you can train and prepare for the big game, seeds wait patiently to explode into life." },
+            { time: 40, text: "Now, go out there and create your own perfect conditions for growth and success, on and off the field!" },
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 80 * scale, color);
+                    break;
+
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 90 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 70 * scale, color);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < (narration[i+1]?.time || duration)) {
+                    subtitlesDiv.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitlesDiv.textContent = '';
+        }
+
+        function updateTimeline(time) {
+            const percentage = (time / duration) * 100;
+            timelineBar.style.width = `${percentage}%`;
+        }
+
+        function formatTime(time) {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fffcf5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '48px "Patrick Hand"';
+            ctx.fillStyle = '#333';
+
+            if (time < 5) {
+                // Scene 1: Football field to seed
+                ctx.fillText("Fourth Down!", 100, 100);
+                drawStickFigure(300, 700, 'thinking', 2, 'blue');
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(1000, 700, 200, 100); // Seed
+            } else if (time < 10) {
+                // Scene 2: Dormant seed = sleeping player
+                ctx.fillText("Dormant...", 100, 100);
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(800, 600, 300, 150);
+                drawStickFigure(300, 700, 'idle', 2, 'gray'); // Sleeping player
+            } else if (time < 15) {
+                // Scene 3: Water hydrating the seed
+                ctx.fillText("Hydration!", 100, 100);
+                ctx.fillStyle = 'blue';
+                for (let i = 0; i < 20; i++) {
+                    ctx.beginPath();
+                    ctx.arc(700 + Math.random() * 400, 500 + Math.random() * 200, 10, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(800, 600, 300, 150);
+                 drawStickFigure(300, 700, 'running', 2, 'orange'); // Runner
+            } else if (time < 20) {
+                // Scene 4: Oxygen entering the seed
+                ctx.fillText("Oxygen!", 100, 100);
+                ctx.fillStyle = 'green';
+                for (let i = 0; i < 20; i++) {
+                    ctx.beginPath();
+                    ctx.arc(700 + Math.random() * 400, 500 + Math.random() * 200, 10, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(800, 600, 300, 150);
+                drawStickFigure(300, 700, 'thinking', 2, 'blue'); // Qb breathing
+            } else if (time < 25) {
+                // Scene 5: Food reserves breaking down
+                ctx.fillText("Nutrients!", 100, 100);
+                 drawStickFigure(300, 700, 'idle', 2, 'red');
+                ctx.fillStyle = 'yellow';
+                for (let i = 0; i < 20; i++) {
+                    ctx.fillRect(700 + Math.random() * 400, 500 + Math.random() * 200, 10, 10);
+                }
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(800, 600, 300, 150);
+            } else if (time < 30) {
+                // Scene 6: Disturbance brings seed to surface
+                ctx.fillText("Disturbance!", 100, 100);
+                ctx.fillStyle = 'gray';
+                ctx.fillRect(600, 700, 600, 200);
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(900, 600, 100, 50);
+                drawStickFigure(300, 700, 'running', 2, 'green'); //Fumble recovery
+            } else if (time < 35) {
+                // Scene 7: Seed sprouting
+                ctx.fillText("Sprouting!", 100, 100);
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(800, 600, 300, 150);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(940, 500, 20, 100); // Root
+                drawStickFigure(300, 700, 'idle', 2, 'blue');
+            } else if (time < 40) {
+                // Scene 8: Seedling growing and team training
+                ctx.fillText("Training!", 100, 100);
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(1000, 500, 40, 50);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(1000, 450, 40, 50);
+                drawStickFigure(300, 700, 'running', 2, 'red');
+            } else if (time < 45) {
+                // Scene 9: Diverse activities and a large plant
+                ctx.fillText("Success!", 100, 100);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(800, 300, 200, 300);
+                drawStickFigure(300, 700, 'idle', 2, 'purple');
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+                if(isPlaying) startTime = null; // Reset startTime when looping
+            }
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline(currentTime);
+            timecodeDiv.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+
+            if (isPlaying) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playPauseButton.textContent = 'Pause';
+                startTime = null; // Reset start time after pause
+                animationFrameId = requestAnimationFrame(gameLoop);
+            } else {
+                playPauseButton.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function scrubToTime(event) {
+            const rect = timeline.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const percentage = clickX / rect.width;
+            currentTime = percentage * duration;
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline(currentTime);
+            timecodeDiv.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+        }
+
+        function updateDuration() {
+            duration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline(currentTime);
+            timecodeDiv.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+        }
+
+        async function startRecording() {
+            if (isRecording) {
+                stopRecording();
+                return;
+            }
+
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'germination_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportButton.textContent = 'Export Video';
+                isRecording = false;
+            };
+
+            mediaRecorder.start();
+            exportButton.textContent = 'Stop Export';
+            isRecording = true;
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+
+        playPauseButton.addEventListener('click', togglePlayPause);
+        timeline.addEventListener('click', scrubToTime);
+        durationSlider.addEventListener('input', updateDuration);
+        exportButton.addEventListener('click', startRecording);
+
+
+        // Initial setup
+        updateTimeline(0);
+        timecodeDiv.textContent = `00:00 / ${formatTime(duration)}`;
+        renderScene(0);
+        animationFrameId = requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

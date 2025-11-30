@@ -1,0 +1,397 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afghanistan: A Land of Art and History</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333;
+            font-size: 32px;
+            text-align: center;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #playPauseButton {
+            padding: 10px 15px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 10px;
+        }
+
+        #timeline {
+            width: 50%;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+
+        #timelineBar {
+            height: 10px;
+            background-color: #4CAF50;
+            width: 0;
+        }
+
+        #timecode {
+            font-size: 20px;
+            margin: 0 10px;
+        }
+
+        #durationSlider {
+            width: 10%;
+            margin: 0 10px;
+        }
+
+        #exportButton {
+            padding: 10px 15px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="sketchCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <div id="timeline">
+                <div id="timelineBar"></div>
+            </div>
+            <span id="timecode">00:00 / 00:30</span>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('sketchCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timeline = document.getElementById('timeline');
+        const timelineBar = document.getElementById('timelineBar');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationDuration = 30;
+        let startTime = null;
+        let paused = false;
+        let currentTime = 0;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine a canvas, vast and layered, like Afghanistan's history." },
+            { time: 5, text: "For millennia, this land at the crossroads of Central and South Asia has inspired art and fueled conflict." },
+            { time: 10, text: "Empires, like brushstrokes across the landscape, have left their mark in vibrant, sometimes violent hues." },
+            { time: 15, text: "From ancient empires to modern superpowers, its strategic location has attracted conquerors, shaping its present reality." },
+            { time: 20, text: "Today, under Taliban rule, Afghanistan grapples with a complex identity and uncertain future, evident in the stark contrast of its landscapes and cultural expressions." },
+            { time: 25, text: "Its art reflects the nation's resilience, a testament to its enduring spirit. Now, consider how you can use your own creative voice to shed light on untold stories and inspire conversations for a more peaceful future." }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            let displacement = 5;
+            let segments = 10;
+            let dx = (x2 - x1) / segments;
+            let dy = (y2 - y1) / segments;
+            let currentX = x1;
+            let currentY = y1;
+
+            ctx.moveTo(currentX, currentY);
+
+            for (let i = 0; i < segments; i++) {
+                currentX += dx + (Math.random() - 0.5) * displacement;
+                currentY += dy + (Math.random() - 0.5) * displacement;
+                ctx.lineTo(currentX, currentY);
+            }
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4 * scale;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 70 * scale, 30 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 40 * scale, x, y + 60 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+                roughLine(x, y, x - 50 * scale, y + 20 * scale, color);
+                roughLine(x, y, x + 50 * scale, y - 20 * scale, color);
+            } else if (pose === 'thinking') {
+                roughLine(x, y - 10 * scale, x - 30 * scale, y - 40 * scale, color);
+                roughLine(x, y - 10 * scale, x + 30 * scale, y - 40 * scale, color);
+            }
+            else {
+                roughLine(x, y, x - 40 * scale, y + 10 * scale, color);
+                roughLine(x, y, x + 40 * scale, y + 10 * scale, color);
+            }
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 60 * scale, x - 30 * scale, y + 120 * scale, color);
+                roughLine(x, y + 60 * scale, x + 40 * scale, y + 90 * scale, color);
+            } else {
+                roughLine(x, y + 60 * scale, x - 20 * scale, y + 140 * scale, color);
+                roughLine(x, y + 60 * scale, x + 20 * scale, y + 140 * scale, color);
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let currentSubtitle = "";
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < (i === narration.length - 1 ? animationDuration : narration[i + 1].time)) {
+                    currentSubtitle = narration[i].text;
+                    break;
+                }
+            }
+            subtitlesDiv.textContent = currentSubtitle;
+
+            if (time < 5) {
+                // Scene 1: Aerial view of landscape
+                ctx.fillStyle = "#ADD8E6";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = "#228B22";
+                ctx.beginPath();
+                ctx.moveTo(100, 800);
+                ctx.bezierCurveTo(300, 600, 500, 900, 700, 750);
+                ctx.bezierCurveTo(900, 600, 1100, 900, 1300, 700);
+                ctx.lineTo(1300, canvas.height);
+                ctx.lineTo(100, canvas.height);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = "#8B4513";
+                ctx.beginPath();
+                ctx.moveTo(400, 300);
+                ctx.lineTo(500, 100);
+                ctx.lineTo(600, 300);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = "yellow";
+                ctx.beginPath();
+                ctx.arc(1700, 100, 60, 0, 2 * Math.PI);
+                ctx.fill();
+            } else if (time < 10) {
+                // Scene 2: Pottery shards and clashing armies
+                ctx.fillStyle = "#F4A460";
+                ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+                ctx.fillStyle = "#D2691E";
+                ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+
+                drawStickFigure(300, 600, 'idle', 2, 'black');
+                ctx.font = "48px Patrick Hand";
+                ctx.fillStyle = 'black';
+                ctx.fillText("Art", 200, 200);
+
+                drawStickFigure(1500, 600, 'running', 2, 'red');
+                ctx.fillText("Conflict", 1300, 200);
+
+            } else if (time < 15) {
+                // Scene 3: Architectural styles blending
+                 ctx.fillStyle = "#8FBC8F";
+                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                 ctx.fillStyle = "#BDB76B";
+                 ctx.fillRect(100, 200, 200, 400);
+
+                 ctx.fillStyle = "#D8BFD8";
+                 ctx.fillRect(400, 300, 250, 300);
+
+                 ctx.fillStyle = "#E9967A";
+                 ctx.fillRect(800, 250, 300, 350);
+
+                drawStickFigure(1500, 500, 'thinking', 2, 'blue');
+            } else if (time < 20) {
+                // Scene 4: Animated map with invasion routes
+                ctx.fillStyle = "#F0E68C";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                 //Simplified Map
+                ctx.fillStyle = "green";
+                ctx.fillRect(500, 200, 400, 500);
+
+                roughLine(200, 100, 500, 200, 'red');
+                roughLine(1200, 100, 900, 200, 'blue');
+                roughLine(500, 700, 1600, 900, 'purple');
+            } else if (time < 25) {
+                // Scene 5: Juxtaposition of marketplace and mountain pass
+                ctx.fillStyle = "#FA8072";
+                ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+
+                 ctx.fillStyle = "#778899";
+                ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+
+                drawStickFigure(200, 700, 'idle', 2, 'black');
+                 ctx.fillText("Marketplace", 50, 200);
+
+                drawStickFigure(1400, 700, 'idle', 2, 'black');
+                ctx.fillText("Mountain Pass", 1100, 200);
+            } else if (time < 30) {
+                // Scene 6: Artist painting mural
+                ctx.fillStyle = "#98FB98";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                 ctx.fillStyle = "#F08080";
+                ctx.fillRect(600, 300, 700, 400);
+
+                drawStickFigure(500, 700, 'idle', 2, 'black');
+                drawStickFigure(1500, 700, 'thinking', 2, 'black');
+            }
+
+        }
+
+        function updateTimeline() {
+            const progress = currentTime / animationDuration;
+            timelineBar.style.width = progress * 100 + '%';
+
+            const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const durationMinutes = Math.floor(animationDuration / 60).toString().padStart(2, '0');
+            const durationSeconds = Math.floor(animationDuration % 60).toString().padStart(2, '0');
+
+            timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+        }
+
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+
+            if (!paused) {
+                currentTime += dt;
+                if (currentTime > animationDuration) {
+                    currentTime = 0;
+                }
+
+                renderScene(currentTime);
+                updateTimeline();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        playPauseButton.addEventListener('click', () => {
+            paused = !paused;
+            playPauseButton.textContent = paused ? 'Play' : 'Pause';
+        });
+
+        timeline.addEventListener('click', (e) => {
+            const rect = timeline.getBoundingClientRect();
+            const clickPosition = (e.clientX - rect.left) / rect.width;
+            currentTime = clickPosition * animationDuration;
+            updateTimeline();
+            renderScene(currentTime);
+        });
+
+        durationSlider.addEventListener('input', () => {
+            animationDuration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline();
+            renderScene(currentTime);
+        });
+
+
+        exportButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                exportButton.textContent = "Export Video";
+            } else {
+                recordedChunks = [];
+                const stream = canvas.captureStream(24);
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'animation.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+
+                mediaRecorder.start();
+                exportButton.textContent = "Stop Export";
+            }
+        });
+
+        animate(0);
+    </script>
+</body>
+</html>

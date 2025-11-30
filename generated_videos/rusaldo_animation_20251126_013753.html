@@ -1,0 +1,482 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Cell Membrane Explained</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(200, 200, 200, 0.5);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            margin: 5px auto;
+        }
+
+        #exportButton {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 16px;
+        }
+
+        #durationSlider {
+            width: 10%;
+            margin: 5px;
+        }
+
+        #timecode {
+          font-size: 16px;
+          margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <input type="range" id="timeline" value="0" step="0.01">
+            <span id="timecode">00:00 / 00:00</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="60">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timeline = document.getElementById('timeline');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let isPlaying = true;
+        let startTime;
+        let currentTime = 0;
+        let duration = 60; // Default duration
+        let mediaRecorder;
+        let recordedBlobs;
+
+        const narration = [
+            { time: 0, text: "Ever wonder how your favorite dish stays perfectly balanced, with flavors in just the right proportion?" },
+            { time: 5, text: "Well, cells are a bit like tiny gourmet kitchens, and their secret ingredient is the cell membrane!" },
+            { time: 10, text: "Imagine it as the restaurant's head chef, controlling everything that enters and exits." },
+            { time: 15, text: "This amazing barrier is primarily a lipid bilayer, a double layer of fats, like a delicious pastry crust surrounding the cell." },
+            { time: 20, text: "Embedded within this crust are proteins, acting like sous chefs, each with specific jobs." },
+            { time: 25, text: "These proteins facilitate transport, whisking ingredients in and out, act as enzymes, speeding up vital chemical reactions, and assist in cell signaling, relaying important messages throughout the kitchen." },
+            { time: 30, text: "This selective permeability is crucial, like a discerning palate allowing only the best flavors through." },
+            { time: 35, text: "Finally, the membrane helps cells stick together, like a perfectly layered cake, and even connects to the cytoskeleton, the building's infrastructure, maintaining the cell's overall form." },
+            { time: 40, text: "The cell membrane is truly the cell's security guard, carefully controlling everything that comes in and out to keep it healthy and functioning!" },
+            { time: 50, text: "Now that you know the cell's secret recipe, go out and create your own cellular masterpiece, understanding how every ingredient plays a vital role!" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 25 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 25 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms (folded)
+                    roughLine(x, y + 10 * scale, x - 15 * scale, y + 10 * scale, color);
+                    roughLine(x - 15 * scale, y + 10 * scale, x - 15 * scale, y + 30 * scale, color);
+
+                    roughLine(x, y + 10 * scale, x + 15 * scale, y + 10 * scale, color);
+                    roughLine(x + 15 * scale, y + 10 * scale, x + 15 * scale, y + 30 * scale, color);
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 25 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 25 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body (leaning forward)
+                    roughLine(x, y - 30 * scale, x + 10 * scale, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x + 10 * scale, y, x - 20 * scale, y - 10 * scale, color);
+                    roughLine(x + 10 * scale, y, x + 40 * scale, y + 30 * scale, color);
+
+                    // Legs
+                    roughLine(x + 10 * scale, y + 50 * scale, x - 15 * scale, y + 90 * scale, color);
+                    roughLine(x + 10 * scale, y + 50 * scale, x + 35 * scale, y + 110 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1: Plating a dish
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+
+                // Plate
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2 + 50, 150, 0, 2 * Math.PI);
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 10;
+                ctx.stroke();
+
+                // Food elements
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width / 2 - 50, canvas.height / 2 - 20, 30, 30);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width / 2 + 20, canvas.height / 2 - 40, 40, 20);
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(canvas.width / 2 - 80, canvas.height / 2 + 10, 20, 50);
+
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 1.0, 'blue');
+
+            } else if (time >= 5 && time < 10) {
+                // Scene 2: Cell as a gourmet kitchen
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(100, 100, canvas.width - 200, canvas.height - 200);
+
+                // Kitchen equipment
+                ctx.fillStyle = '#808080';
+                ctx.fillRect(200, 200, 50, 100); // Oven
+                ctx.fillRect(300, 200, 100, 50); // Counter
+                ctx.fillStyle = 'orange';
+                ctx.beginPath();
+                ctx.arc(500, 300, 40, 0, 2 * Math.PI); // Pan
+                ctx.fill();
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 1.0, 'blue');
+
+            } else if (time >= 10 && time < 15) {
+                // Scene 3: Membrane as a gatekeeper
+                ctx.fillStyle = '#4682B4';
+                ctx.fillRect(canvas.width / 2 - 100, canvas.height / 2 - 100, 200, 200);
+
+                // Molecules trying to enter
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width / 2 - 150, canvas.height / 2 - 50, 30, 30);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width / 2 + 120, canvas.height / 2 - 50, 30, 30);
+                drawStickFigure(canvas.width * 0.2, canvas.height * 0.8, 'thinking', 1.0, 'blue');
+
+            } else if (time >= 15 && time < 20) {
+                // Scene 4: Lipid bilayer
+                let x = 100;
+                while (x < canvas.width - 100) {
+                    ctx.fillStyle = '#FFA500';
+                    ctx.beginPath();
+                    ctx.arc(x, canvas.height / 2 - 50, 20, 0, Math.PI, false);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#FF4500';
+                    ctx.beginPath();
+                    ctx.arc(x, canvas.height / 2 + 50, 20, Math.PI, 0, false);
+                    ctx.fill();
+
+                    roughLine(x, canvas.height / 2 - 30, x, canvas.height / 2 + 30, '#FF4500');
+                    x += 40;
+                }
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 1.0, 'blue');
+
+            } else if (time >= 20 && time < 25) {
+                // Scene 5: Proteins embedded in the bilayer
+                let x = 200;
+                while (x < canvas.width - 200) {
+                    ctx.fillStyle = '#800080';
+                    ctx.fillRect(x, canvas.height / 2 - 40, 40, 80);
+                    x += 100;
+                }
+                drawStickFigure(canvas.width * 0.2, canvas.height * 0.8, 'thinking', 1.0, 'blue');
+            } else if (time >= 25 && time < 30) {
+                // Scene 6: Protein functions
+                // Transport
+                ctx.fillStyle = 'green';
+                ctx.fillRect(200, canvas.height / 2 - 20, 30, 30);
+                ctx.fillStyle = '#800080';
+                ctx.fillRect(250, canvas.height / 2 - 40, 40, 80);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(300, canvas.height / 2 - 20, 30, 30);
+
+                // Enzyme
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(400, canvas.height / 2 - 20, 30, 30);
+                ctx.fillStyle = '#800080';
+                ctx.fillRect(450, canvas.height / 2 - 40, 40, 80);
+                ctx.fillStyle = 'purple';
+                ctx.fillRect(500, canvas.height / 2 - 20, 30, 30);
+
+                // Signaling
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(600, canvas.height / 2 - 20, 30, 30);
+                ctx.fillStyle = '#800080';
+                ctx.fillRect(650, canvas.height / 2 - 40, 40, 80);
+                ctx.fillStyle = 'orange';
+                ctx.fillRect(700, canvas.height / 2 - 20, 30, 30);
+
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 1.0, 'blue');
+
+            } else if (time >= 30 && time < 35) {
+                // Scene 7: Selective permeability
+                ctx.fillStyle = '#4682B4';
+                ctx.fillRect(canvas.width / 2 - 100, canvas.height / 2 - 100, 200, 200);
+
+                // Molecules trying to enter
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width / 2 - 80, canvas.height / 2 - 50, 30, 30);
+
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width / 2 + 100, canvas.height / 2 - 50, 30, 30);
+
+                drawStickFigure(canvas.width * 0.2, canvas.height * 0.8, 'thinking', 1.0, 'blue');
+
+            } else if (time >= 35 && time < 40) {
+                // Scene 8: Cell adhesion and cytoskeleton
+                ctx.fillStyle = '#90EE90';
+                ctx.fillRect(200, canvas.height / 2 - 50, 100, 100);
+                ctx.fillRect(350, canvas.height / 2 - 50, 100, 100);
+                ctx.fillRect(500, canvas.height / 2 - 50, 100, 100);
+
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(250, canvas.height / 2 + 50);
+                ctx.lineTo(550, canvas.height / 2 + 50);
+                ctx.stroke();
+
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 1.0, 'blue');
+
+            } else if (time >= 40 && time < 50) {
+                // Scene 9: Cell's Security Guard
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width / 2 - 150, canvas.height / 2 - 50, 50, 100);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width / 2 + 100, canvas.height / 2 - 50, 50, 100);
+                drawStickFigure(canvas.width * 0.2, canvas.height * 0.8, 'running', 1.0, 'blue');
+
+            } else if (time >= 50 && time <= 60) {
+                // Scene 10: Cellular Masterpiece
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(200, canvas.height / 2 - 50, 100, 100);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(400, canvas.height / 2 - 50, 100, 100);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(600, canvas.height / 2 - 50, 100, 100);
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 1.0, 'blue');
+
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    subtitlesDiv.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitlesDiv.textContent = '';
+        }
+
+        function updateTimeline(time) {
+            timeline.value = time;
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            const totalMinutes = Math.floor(duration / 60);
+            const totalSeconds = Math.floor(duration % 60);
+            timecodeDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} / ${String(totalMinutes).padStart(2, '0')}:${String(totalSeconds).padStart(2, '0')}`;
+
+        }
+
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+                isPlaying = false;
+                playPauseButton.textContent = "Play";
+            }
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline(currentTime);
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playPauseButton.textContent = "Pause";
+                startTime = performance.now() - (currentTime * 1000); // Adjust startTime to current time
+                animationFrameId = requestAnimationFrame(animationLoop);
+            } else {
+                playPauseButton.textContent = "Play";
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        playPauseButton.addEventListener('click', togglePlayPause);
+
+        timeline.addEventListener('input', function() {
+            currentTime = parseFloat(this.value);
+            updateTimeline(currentTime);
+            updateSubtitles(currentTime);
+            renderScene(currentTime);
+            if (!isPlaying) {
+                startTime = performance.now() - (currentTime * 1000); // Adjust startTime to current time
+            }
+
+        });
+
+        durationSlider.addEventListener('input', function() {
+            duration = parseInt(this.value);
+            timeline.max = duration;
+            updateTimeline(currentTime);
+        });
+
+        function startRecording() {
+            recordedBlobs = [];
+            const stream = canvas.captureStream(24);
+            let options = { mimeType: 'video/webm;codecs=vp9' };
+            try {
+                mediaRecorder = new MediaRecorder(stream, options);
+            } catch (e) {
+                console.error('Exception while creating MediaRecorder:', e);
+                return;
+            }
+
+            mediaRecorder.onstop = (event) => {
+                console.log('Recorder stopped: ', event);
+                const blob = new Blob(recordedBlobs, {
+                    type: 'video/webm'
+                });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'cell_membrane_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+                exportButton.textContent = 'Export Video';
+            };
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedBlobs.push(event.data);
+                }
+            };
+            mediaRecorder.start();
+            console.log('MediaRecorder started', mediaRecorder);
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            console.log('Recorded Blobs: ', recordedBlobs);
+        }
+
+        exportButton.addEventListener('click', () => {
+            if (exportButton.textContent === 'Export Video') {
+                exportButton.textContent = 'Stop Export';
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        timeline.max = duration;
+        animationLoop(); // Start the animation
+    </script>
+</body>
+</html>

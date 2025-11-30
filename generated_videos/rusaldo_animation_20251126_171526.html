@@ -1,0 +1,472 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typhoon Disruption Animation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333;
+            font-size: 32px;
+            text-align: center;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ccc;
+            margin: 10px auto;
+            cursor: pointer;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #3498db;
+            width: 0;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+
+        input[type=range] {
+            width: 100px;
+        }
+
+        #exportButton {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <input type="range" id="timelineSlider" min="0" max="100" value="0">
+            <span id="timecode">00:00 / 00:30</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationDuration = 30;
+        let startTime = null;
+        let paused = false;
+        let currentTime = 0;
+        let frameRate = 24;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let recording = false;
+
+        const narration = [
+            { time: 0, text: "Imagine a global supply chain, disrupted." },
+            { time: 3, text: "Typhoons in the Northwestern Pacific—nature's volatile market forces—pack winds that can cripple entire economies." },
+            { time: 6, text: "These powerful cyclones demand your attention because they can completely wash away profits." },
+            { time: 8, text: "Typhoons emerge in warm ocean waters, fueling humidity that breeds low wind shear, the perfect storm for intensification." },
+            { time: 11, text: "The Northwest Pacific sees more of these disruptors than any other place on Earth." },
+            { time: 14, text: "Eighteen nations collaborate, naming these storms like brands, to warn vulnerable markets." },
+            { time: 17, text: "Subtropical ridges guide the typhoon's path, a strategic routing problem with huge cost implications." },
+            { time: 21, text: "Constant monitoring and innovative preparedness are crucial for protecting businesses and communities from these turbulent events." },
+            { time: 26, text: "Become a strategic leader who masters the challenge of typhoons." }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms (bent)
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x - 30 * scale, y + 10 * scale, x - 40 * scale, y + 30 * scale, color);
+
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+                    roughLine(x + 30 * scale, y + 10 * scale, x + 40 * scale, y + 30 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body (leaning forward)
+                    roughLine(x, y - 30 * scale, x + 10 * scale, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x + 10 * scale, y, x - 20 * scale, y + 20 * scale, color);
+                    roughLine(x + 10 * scale, y, x + 40 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x + 10 * scale, y + 50 * scale, x - 10 * scale, y + 90 * scale, color);
+                    roughLine(x + 10 * scale, y + 50 * scale, x + 30 * scale, y + 110 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let subtitle = "";
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    subtitle = narration[i].text;
+                    break;
+                }
+            }
+            subtitlesDiv.textContent = subtitle;
+
+            if (time < 3) {
+                // Scene 1: Flooded port
+                ctx.fillStyle = 'rgba(0, 100, 200, 0.5)';
+                ctx.fillRect(0, 540, 1920, 540);
+
+                for (let i = 0; i < 20; i++) {
+                    let x = Math.random() * 1920;
+                    let y = 540 + Math.random() * 540;
+                    ctx.fillStyle = 'brown';
+                    ctx.fillRect(x, y, 50, 50);
+                }
+
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.3)';
+                for (let i = 0; i < 100; i++) {
+                  let x = Math.random() * 1920;
+                  let y = Math.random() * 540;
+                  ctx.fillRect(x, y, 3, 15);
+                }
+            } else if (time < 6) {
+                // Scene 2: Satellite image of typhoon
+                let centerX = canvas.width / 2;
+                let centerY = canvas.height / 2;
+                let radius = 400;
+                let angle = time * 0.5;
+
+                for (let i = 0; i < 1000; i++) {
+                    let randomAngle = Math.random() * 2 * Math.PI;
+                    let randomRadius = Math.random() * radius;
+                    let x = centerX + randomRadius * Math.cos(randomAngle);
+                    let y = centerY + randomRadius * Math.sin(randomAngle);
+                    let color = `rgba(255, ${Math.floor(255 - (randomRadius / radius) * 255)}, 0, 0.5)`;
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, y, 2, 2);
+                }
+
+            } else if (time < 8) {
+                // Scene 3: Profit graph
+                ctx.fillStyle = 'lightgray';
+                ctx.fillRect(100, 200, 1720, 600);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(200, 600, 100, 200);
+                ctx.fillRect(400, 400, 100, 400);
+                ctx.fillRect(600, 500, 100, 300);
+
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(100, 200, 1720, 600);
+
+                ctx.font = "24px Patrick Hand";
+                ctx.fillStyle = 'black';
+                ctx.fillText("Profits", 120, 230);
+                ctx.fillText("Time", 1700, 770);
+
+            } else if (time < 11) {
+                // Scene 4: Warm water and wind shear
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(0, 540, 1920, 540);
+                ctx.fillStyle = 'white';
+                for (let i = 0; i < 50; i++) {
+                    let x = Math.random() * 1920;
+                    let y = 540 + Math.random() * 540;
+                    ctx.fillRect(x, y, 5, 15);
+                }
+
+                // Anemometer
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(1800, 100, 30, 0, 2 * Math.PI);
+                ctx.stroke();
+
+                let angle = time * 0.1;
+                ctx.beginPath();
+                ctx.moveTo(1800, 100);
+                ctx.lineTo(1800 + 30 * Math.cos(angle), 100 + 30 * Math.sin(angle));
+                ctx.stroke();
+            } else if (time < 14) {
+                // Scene 5: Global map
+                ctx.fillStyle = 'lightgreen';
+                ctx.fillRect(0, 0, 1920, 1080);
+
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(1600, 500, 100, 0, 2 * Math.PI);
+                ctx.fill();
+            } else if (time < 17) {
+                // Scene 6: Flags
+                const flags = ["ph", "cn", "jp", "kr", "vn"];
+                for (let i = 0; i < flags.length; i++) {
+                    ctx.fillStyle = 'lightblue';
+                    ctx.fillRect(200 + i * 200, 400, 150, 100);
+                    ctx.fillStyle = 'black';
+                    ctx.font = "30px Patrick Hand";
+                    ctx.fillText(flags[i].toUpperCase(), 250 + i * 200, 460);
+                }
+            } else if (time < 21) {
+                 // Scene 7: Typhoon path
+                ctx.fillStyle = 'lightblue';
+                ctx.fillRect(0, 0, 1920, 1080);
+
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(100, 100);
+                ctx.quadraticCurveTo(960, 540, 1820, 100);
+                ctx.stroke();
+
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                let x = 100 + (time - 17) / 4 * 1720;
+                let y = 100;
+                ctx.arc(x, y, 50, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'green';
+                ctx.font = "20px Patrick Hand";
+                ctx.fillText("Money Lost", x, y + 70);
+
+
+            } else if (time < 26) {
+                // Scene 8: Monitoring and preparedness
+                ctx.fillStyle = 'lightgray';
+                ctx.fillRect(0, 0, 960, 1080);
+                ctx.fillStyle = 'lightgreen';
+                ctx.fillRect(960, 0, 960, 1080);
+
+                drawStickFigure(200, 600, 'thinking', 2, 'black');
+                drawStickFigure(1200, 600, 'idle', 2, 'black');
+            }
+             else {
+                // Scene 9: Strategic leader
+                ctx.fillStyle = 'lightgreen';
+                ctx.fillRect(0, 0, 1920, 1080);
+
+                drawStickFigure(960, 600, 'idle', 3, 'blue');
+
+                ctx.fillStyle = 'black';
+                ctx.font = "60px Patrick Hand";
+                ctx.textAlign = "center";
+                ctx.fillText("Strategic Leadership: Weathering the Storms", 960, 100);
+
+            }
+
+        }
+
+        function updateTimecode() {
+            const minutes = Math.floor(currentTime / 60);
+            const seconds = Math.floor(currentTime % 60);
+            const durationMinutes = Math.floor(animationDuration / 60);
+            const durationSeconds = Math.floor(animationDuration % 60);
+
+            const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            const formattedDuration = `${String(durationMinutes).padStart(2, '0')}:${String(durationSeconds).padStart(2, '0')}`;
+            timecodeDisplay.textContent = `${formattedTime} / ${formattedDuration}`;
+        }
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const progress = (timestamp - startTime) / 1000;
+
+            if (!paused) {
+                currentTime = progress % animationDuration;
+            }
+
+            renderScene(currentTime);
+            timelineSlider.value = (currentTime / animationDuration) * 100;
+            updateTimecode();
+
+            if (!paused) {
+                requestAnimationFrame(animationLoop);
+            }
+        }
+
+        function togglePlayPause() {
+            paused = !paused;
+            if (paused) {
+                playPauseButton.textContent = 'Play';
+            } else {
+                playPauseButton.textContent = 'Pause';
+                startTime = performance.now() - (currentTime * 1000);
+                requestAnimationFrame(animationLoop);
+            }
+        }
+
+        function seekTimeline() {
+            currentTime = (timelineSlider.value / 100) * animationDuration;
+            updateTimecode();
+            renderScene(currentTime);
+        }
+
+        function updateDuration() {
+            animationDuration = parseInt(durationSlider.value);
+            timelineSlider.value = 0;
+            currentTime = 0;
+            updateTimecode();
+            renderScene(currentTime);
+        }
+
+        function startRecording() {
+            recording = true;
+            recordedChunks = [];
+            const stream = canvas.captureStream(frameRate);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportButton.textContent = 'Export Video';
+                recording = false;
+            };
+
+            mediaRecorder.start();
+            exportButton.textContent = 'Stop Export';
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+        function exportVideo() {
+            if (!recording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+        playPauseButton.addEventListener('click', togglePlayPause);
+        timelineSlider.addEventListener('input', seekTimeline);
+        durationSlider.addEventListener('input', updateDuration);
+        exportButton.addEventListener('click', exportVideo);
+
+        updateTimecode();
+        requestAnimationFrame(animationLoop);
+    </script>
+</body>
+</html>

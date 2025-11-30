@@ -1,0 +1,497 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cell Membrane Animation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            padding: 8px 12px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timelineSlider" min="0" max="100" value="0">
+            <span id="timecode">00:00 / 01:00</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="60">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecodeLabel = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let isPlaying = false;
+        let startTime;
+        let currentTime = 0;
+        let duration = 60;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine your favorite song, a complex symphony of instruments and voices working together; just like a cell, it needs a boundary, a space to create its magic." },
+            { time: 5, text: "That's the cell membrane, the unsung hero holding everything together! Picture a bustling city at night, lights flickering against a protective wall – the cell membrane is similar, a flexible barrier made of tiny building blocks called phospholipids." },
+            { time: 10, text: "These phospholipids arrange themselves in a double layer, like dancers in two facing lines, creating a selective shield against the outside world." },
+            { time: 15, text: "Now visualize tiny protein bouncers scattered throughout the wall, carefully controlling who and what gets in and out of the cell." },
+            { time: 20, text: "Only specific molecules get the VIP pass, allowing the cell to receive nutrients and send out waste, like a perfectly tuned musical instrument receiving instructions and producing beautiful sounds." },
+            { time: 25, text: "The membrane also facilitates communication between cells, allowing them to coordinate, much like musicians in an orchestra listening to each other." },
+            { time: 30, text: "It's crucial for cell adhesion, ion conductivity, cell signaling, and even supports vital structures, helping the cell maintain its form and function." },
+            { time: 40, text: "So next time you listen to your favorite track, remember the cell membrane: the ultimate guardian and gatekeeper, working tirelessly to keep the cell alive and harmonious." },
+            { time: 50, text: "Explore the music within every cell and compose your own biological symphony!" },
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            const displacement = 5;
+            const segments = 10;
+            let currentX = x1;
+            let currentY = y1;
+            const dx = (x2 - x1) / segments;
+            const dy = (y2 - y1) / segments;
+
+            for (let i = 0; i < segments; i++) {
+                currentX += dx;
+                currentY += dy;
+                const randomX = currentX + (Math.random() - 0.5) * displacement;
+                const randomY = currentY + (Math.random() - 0.5) * displacement;
+                ctx.lineTo(randomX, randomY);
+            }
+
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+
+                    // Thinking bubble
+                    ctx.beginPath();
+                    ctx.arc(x + 50 * scale, y - 80 * scale, 30 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                    ctx.fill();
+                    ctx.font = `${20*scale}px Patrick Hand`;
+                    ctx.fillStyle = 'black';
+                    ctx.textAlign = 'center';
+                    ctx.fillText("?", x + 50 * scale, y - 70 * scale);
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 120 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1: Orchestra
+                ctx.fillStyle = '#f0d0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '48px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+                ctx.fillText("A Cell's Symphony", canvas.width / 2, 100);
+
+                // Simulate an orchestra with circles
+                for (let i = 0; i < 50; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const radius = Math.random() * 10 + 5;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = `hsl(${i * 7}, 70%, 50%)`;
+                    ctx.fill();
+                }
+            } else if (time >= 5 && time < 10) {
+                // Scene 2: Cityscape
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Simulate city lights
+                for (let i = 0; i < 100; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const radius = Math.random() * 3 + 1;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = `hsl(${Math.random() * 60 + 30}, 100%, ${Math.random() * 50 + 50}%)`;
+                    ctx.fill();
+                }
+            } else if (time >= 10 && time < 15) {
+                // Scene 3: Phospholipid Bilayer
+                ctx.fillStyle = '#a0d0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const phospholipidWidth = 50;
+                const phospholipidHeight = 80;
+                const spacing = 100;
+
+                for (let i = 0; i < 15; i++) {
+                    // Top layer
+                    ctx.fillStyle = 'rgba(200,100,50,0.8)';
+                    ctx.beginPath();
+                    ctx.ellipse(100 + i * spacing, 300, phospholipidWidth / 2, phospholipidHeight / 5, 0, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.fillRect(100 + i * spacing - phospholipidWidth / 2, 300, phospholipidWidth, phospholipidHeight);
+
+                    // Bottom layer
+                    ctx.fillStyle = 'rgba(200,100,50,0.8)';
+                    ctx.beginPath();
+                    ctx.ellipse(100 + i * spacing, 700, phospholipidWidth / 2, phospholipidHeight / 5, Math.PI, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.fillRect(100 + i * spacing - phospholipidWidth / 2, 700 - phospholipidHeight, phospholipidWidth, phospholipidHeight);
+                }
+            } else if (time >= 15 && time < 20) {
+                // Scene 4: Protein Bouncers
+                ctx.fillStyle = '#f0a0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw protein channels
+                ctx.fillStyle = '#777';
+                ctx.fillRect(200, 300, 100, 400);
+                ctx.fillRect(500, 300, 100, 400);
+                ctx.fillRect(800, 300, 100, 400);
+
+                // Draw molecules passing through
+                ctx.fillStyle = 'blue';
+                ctx.beginPath();
+                ctx.arc(250, 350, 15, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(550, 650, 15, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'yellow';
+                ctx.beginPath();
+                ctx.arc(850, 350, 15, 0, 2 * Math.PI);
+                ctx.fill();
+            } else if (time >= 20 && time < 25) {
+                // Scene 5: VIP Molecules and Musical Instrument
+                ctx.fillStyle = '#a0f0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw VIP molecules
+                ctx.fillStyle = 'purple';
+                ctx.beginPath();
+                ctx.arc(300, 500, 20, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillText('VIP', 280, 510)
+
+                // Draw musical instrument
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(700, 400, 200, 100);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 5;
+                ctx.strokeRect(700, 400, 200, 100);
+            } else if (time >= 25 && time < 30) {
+                // Scene 6: Cell Communication and Orchestra
+                ctx.fillStyle = '#f0f0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw two cells
+                ctx.fillStyle = 'orange';
+                ctx.beginPath();
+                ctx.arc(300, 500, 50, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'cyan';
+                ctx.beginPath();
+                ctx.arc(700, 500, 50, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Draw signaling molecules
+                ctx.strokeStyle = 'red';
+                roughLine(350, 500, 650, 500, 'red');
+            } else if (time >= 30 && time < 40) {
+                // Scene 7: Cell Functions
+                ctx.fillStyle = '#d0a0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw diagrams for each function
+                ctx.font = '32px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+                ctx.fillText("Cell Adhesion", 300, 300);
+                ctx.fillText("Ion Conductivity", 700, 300);
+                ctx.fillText("Cell Signaling", 1100, 300);
+                drawStickFigure(300, 500, 'idle', 0.75, 'black');
+                drawStickFigure(700, 500, 'thinking', 0.75, 'blue');
+                drawStickFigure(1100, 500, 'running', 0.75, 'red');
+            } else if (time >= 40 && time < 50) {
+                // Scene 8: Person Listening to Music
+                ctx.fillStyle = '#a0a0a0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStickFigure(960, 540, 'idle', 2.0, 'blue');
+                ctx.font = '32px Patrick Hand';
+                ctx.fillStyle = '#333';
+                ctx.textAlign = 'center';
+                ctx.fillText("Music Lover", 960, 200);
+            } else if (time >= 50 && time < 60) {
+                // Scene 9: Microscopic Cells and Student Composing
+                ctx.fillStyle = '#a0f0f0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Simulate cells
+                for (let i = 0; i < 30; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const radius = Math.random() * 20 + 10;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                    ctx.fill();
+                }
+                drawStickFigure(1500, 540, 'thinking', 1.5, 'red');
+                ctx.fillText("Student", 1500, 200);
+            }
+        }
+
+        function updateSubtitles(time) {
+            let currentSubtitle = '';
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    currentSubtitle = narration[i].text;
+                    break;
+                }
+            }
+            subtitlesDiv.textContent = currentSubtitle;
+        }
+
+        function updateTimeline(time) {
+            const progress = (time / duration) * 100;
+            timelineSlider.value = progress;
+
+            const currentMinutes = Math.floor(time / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(time % 60).toString().padStart(2, '0');
+            const totalMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const totalSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeLabel.textContent = `${currentMinutes}:${currentSeconds} / ${totalMinutes}:${totalSeconds}`;
+        }
+
+        function animationLoop() {
+            const now = performance.now();
+            const dt = (now - startTime) / 1000;
+            startTime = now;
+
+            currentTime += dt;
+            if (currentTime > duration) {
+                currentTime = 0;
+                pauseAnimation();
+            }
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline(currentTime);
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function playAnimation() {
+            if (!isPlaying) {
+                isPlaying = true;
+                playPauseBtn.textContent = 'Pause';
+                startTime = performance.now() - (currentTime * 1000);
+                animationLoop();
+            }
+        }
+
+        function pauseAnimation() {
+            if (isPlaying) {
+                isPlaying = false;
+                playPauseBtn.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        playPauseBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        });
+
+        timelineSlider.addEventListener('input', () => {
+            currentTime = (timelineSlider.value / 100) * duration;
+            updateTimeline(currentTime);
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+        });
+
+        durationSlider.addEventListener('input', () => {
+            duration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline(currentTime);
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cell_membrane_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = "Export Video";
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = "Stop Export";
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+        // Initial setup
+        updateTimeline(0);
+        renderScene(0);
+        updateSubtitles(0);
+    </script>
+</body>
+</html>

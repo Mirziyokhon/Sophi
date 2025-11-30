@@ -1,0 +1,366 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Northern Hemisphere Explained</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1800px;
+            text-align: center;
+            font-size: 24px;
+            color: #333;
+        }
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+        button {
+            font-family: 'Patrick Hand', cursive;
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        input[type="range"] {
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timelineSlider" min="0" max="100" value="0">
+            <span id="timecode">00:00 / 01:00</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="60">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitles = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timelineSlider = document.getElementById('timelineSlider');
+        const timecode = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationDuration = 60;
+        let animationStartTime = null;
+        let isPlaying = true;
+        let currentFrameTime = 0;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        durationSlider.addEventListener('input', () => {
+            animationDuration = parseInt(durationSlider.value);
+            updateTimecode();
+        });
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.lineWidth = 3 * scale;
+            ctx.strokeStyle = color;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+                 roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                 roughLine(x, y, x + 30 * scale, y - 20 * scale, color);
+            } else if (pose === 'thinking') {
+                 roughLine(x, y, x - 30 * scale, y - 20 * scale, color);
+                 roughLine(x, y, x + 30 * scale, y - 20 * scale, color);
+            }
+            else {
+                roughLine(x, y, x - 30 * scale, y, color);
+                roughLine(x, y, x + 30 * scale, y, color);
+            }
+
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 80 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 70 * scale, color);
+            } else {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+            }
+        }
+
+
+        const narration = [
+            { time: 0, text: "Imagine a single sunbeam, not just warmth, but pure energy hurtling towards Earth." },
+            { time: 5, text: "Now, picture that light striking the Northern Hemisphere, the top half of our planet, where most of the world's land sits." },
+            { time: 10, text: "The angle of that light, shifting with Earth's tilt, creates distinct seasons, longer days in summer and shorter in winter." },
+            { time: 15, text: "Beneath the sun, ocean currents swirl, gigantic rivers in the sea driven by winds and the Earth's spin." },
+            { time: 20, text: "Think of the Gulf Stream, a warm current influencing weather far across the Atlantic." },
+            { time: 25, text: "This hemisphere holds 67% of Earth's land, a vast expanse shaped by ancient ice ages, leaving behind mountains and fertile plains." },
+            { time: 30, text: "From frozen Arctic tundra to steamy tropical jungles, the Northern Hemisphere's climate zones dictate life, from the polar bear to the vibrant rainforest canopy." },
+            { time: 35, text: "The weather shifts dramatically, hurricanes gather force and temperatures plunge, shaping every corner of this massive, diverse, and dynamic environment." },
+            { time: 40, text: "Ocean currents play a crucial role, transporting heat and influencing regional climates" },
+            { time: 45, text: "The hemisphere's diverse geography supports a wide range of ecosystems." },
+            { time: 50, text: "Human activities have a significant impact on the Northern Hemisphere's environment." },
+            { time: 55, text: "So explore, discover, and understand the powerful forces that shape our world, starting with the hemisphere we call home." }
+        ];
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Sunbeam animation
+                const sunX = canvas.width * 0.2;
+                const sunY = canvas.height * 0.2;
+                const beamLength = 300;
+                const beamWidth = 5;
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = beamWidth;
+                ctx.beginPath();
+                ctx.moveTo(sunX, sunY);
+                ctx.lineTo(sunX + beamLength, sunY + beamLength);
+                ctx.stroke();
+                ctx.fillStyle = 'orange';
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, 50, 0, 2 * Math.PI);
+                ctx.fill();
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.5, 'idle', 1, 'blue');
+            } else if (time >= 5 && time < 10) {
+                // Northern Hemisphere Map
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, canvas.width * 0.8, canvas.height * 0.6);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.7, canvas.width * 0.8, canvas.height * 0.2);
+                drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+            } else if (time >= 10 && time < 15) {
+                // Seasons Visualization
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, 50, 50);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.3, 50, 50);
+                drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'thinking', 1, 'blue');
+            } else if (time >= 15 && time < 20) {
+                // Ocean Currents
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.5, canvas.height * 0.5, 100, 0, Math.PI * 2);
+                ctx.stroke();
+                drawStickFigure(canvas.width * 0.2, canvas.height * 0.5, 'idle', 1, 'blue');
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.5, 'idle', 1, 'blue');
+
+            } else if (time >= 20 && time < 25) {
+                 // Gulf Stream
+                ctx.strokeStyle = 'orange';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.5, canvas.height * 0.5, 100, 0, Math.PI);
+                ctx.stroke();
+                drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+
+            } else if (time >= 25 && time < 30) {
+                // Land Mass
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, canvas.width * 0.8, canvas.height * 0.8);
+                 drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+
+            } else if (time >= 30 && time < 35) {
+                // Climate Zones
+                ctx.fillStyle = 'lightblue';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, 100, 100);
+                ctx.fillStyle = 'lightgreen';
+                ctx.fillRect(canvas.width * 0.3, canvas.height * 0.3, 100, 100);
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(canvas.width * 0.5, canvas.height * 0.5, 100, 100);
+                 drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+
+            } else if (time >= 35 && time < 40) {
+                // Weather
+                ctx.fillStyle = 'gray';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, 50, 50);
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(canvas.width * 0.3, canvas.height * 0.3, 50, 50);
+                drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+
+            }
+             else if (time >= 40 && time < 45) {
+                // Ocean Currents
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.5, canvas.height * 0.5, 100, 0, Math.PI * 2);
+                ctx.stroke();
+                drawStickFigure(canvas.width * 0.2, canvas.height * 0.5, 'idle', 1, 'blue');
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.5, 'idle', 1, 'blue');
+
+            } else if (time >= 45 && time < 50) {
+                // Land Mass
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, canvas.width * 0.8, canvas.height * 0.8);
+                 drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+
+            } else if (time >= 50 && time < 55) {
+                 ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width * 0.1, canvas.height * 0.1, 50, 50);
+                 drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'idle', 1, 'blue');
+            }
+            else if (time >= 55 && time < 60) {
+                drawStickFigure(canvas.width * 0.5, canvas.height * 0.8, 'running', 1, 'blue');
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < (i === narration.length - 1 ? animationDuration : narration[i + 1].time)) {
+                    subtitles.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitles.textContent = '';
+        }
+
+        function updateTimeline(time) {
+            const progress = (time / animationDuration) * 100;
+            timelineSlider.value = progress;
+        }
+
+        function updateTimecode() {
+            const currentTimeFormatted = formatTime(currentFrameTime);
+            const durationFormatted = formatTime(animationDuration);
+            timecode.textContent = `${currentTimeFormatted} / ${durationFormatted}`;
+        }
+
+        function formatTime(time) {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function animationLoop(timestamp) {
+            if (!animationStartTime) animationStartTime = timestamp;
+            const dt = (timestamp - animationStartTime) / 1000;
+            animationStartTime = timestamp;
+
+            if (isPlaying) {
+                currentFrameTime += dt;
+                if (currentFrameTime > animationDuration) {
+                    currentFrameTime = 0;
+                }
+            }
+
+            const time = currentFrameTime;
+
+            renderScene(time);
+            updateSubtitles(time);
+            updateTimeline(time);
+            updateTimecode();
+
+            requestAnimationFrame(animationLoop);
+        }
+
+        playPauseBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playPauseBtn.textContent = isPlaying ? 'Pause' : 'Play';
+        });
+
+        timelineSlider.addEventListener('input', () => {
+            const progress = timelineSlider.value;
+            currentFrameTime = (progress / 100) * animationDuration;
+            updateTimecode();
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'northern_hemisphere.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = 'Export Video';
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = 'Stop Export';
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+
+        exportBtn.addEventListener('click', () => {
+            if (exportBtn.textContent === 'Export Video') {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+
+        requestAnimationFrame(animationLoop);
+    </script>
+</body>
+</html>

@@ -1,0 +1,442 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Uzbekistan Youth & Logistics Gigs</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            background-color: #fffcf5;
+        }
+
+        canvas {
+            display: block;
+            background-color: #fffcf5;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1800px;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        #timeline {
+            width: 600px;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #3498db;
+            width: 0;
+        }
+
+        button {
+            padding: 8px 12px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        input[type=range] {
+            width: 150px;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <div id="timeline">
+                <div id="timeline-progress"></div>
+            </div>
+            <span id="timecode">00:00 / 00:30</span>
+            <label for="duration">Duration (s):</label>
+            <input type="range" id="duration" min="30" max="180" value="30">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timelineProgress = document.getElementById('timeline-progress');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('duration');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let isPlaying = true;
+        let startTime;
+        let currentTime = 0;
+        let duration = parseInt(durationSlider.value);
+
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        // Narration data
+        const narration = [
+            { time: 0, text: "Imagine a vibrant Uzbek textile, bursting with potential, its intricate patterns representing the dreams of its youth." },
+            { time: 5, text: "But now, a different thread is being woven in: the lure of instant income from US logistics gigs." },
+            { time: 10, text: "These young artists of life are drawn to overnight shifts, their energy fueling a global network." },
+            { time: 15, text: "Yet, this fast cash comes at a cost, potentially dimming their long-term futures and impacting their health." },
+            { time: 20, text: "Is this economic opportunity truly enriching Uzbekistan's masterpiece, or is it sacrificing its beauty for fleeting gain?" },
+            { time: 25, text: "How can we ensure the colors of their future shine brightly?" }
+        ];
+
+
+        // Utility functions
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3 * scale;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 70 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 50 * scale, x, y + 50 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+                roughLine(x, y, x - 30 * scale, y + 30 * scale, color);
+                roughLine(x, y, x + 30 * scale, y - 30 * scale, color);
+            } else if (pose === 'thinking') {
+                roughLine(x, y, x - 30 * scale, y - 20 * scale, color);
+                roughLine(x, y, x + 30 * scale, y - 20 * scale, color);
+            } else { // idle
+                roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+            }
+
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 50 * scale, x - 40 * scale, y + 100 * scale, color);
+                roughLine(x, y + 50 * scale, x + 40 * scale, y + 60 * scale, color);
+            } else {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 120 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 120 * scale, color);
+            }
+        }
+
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fffcf5'; // Paper background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function updateTimecode() {
+            const minutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const seconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const totalMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const totalSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${minutes}:${seconds} / ${totalMinutes}:${totalSeconds}`;
+        }
+
+        function updateTimeline() {
+            const progress = (currentTime / duration) * 100;
+            timelineProgress.style.width = `${progress}%`;
+        }
+
+
+        function renderScene(time) {
+            clearCanvas();
+
+            // Scene 1 (0-5s)
+            if (time >= 0 && time < 5) {
+                subtitlesDiv.textContent = narration.find(item => item.time === 0).text;
+                // Visual: Uzbek textile
+                const textileWidth = 800;
+                const textileHeight = 600;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+
+                // Draw a simple representation of the textile
+                ctx.fillStyle = '#cda434';  // Gold color
+                ctx.fillRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.strokeStyle = '#000';  // Black border
+                ctx.lineWidth = 5;
+                ctx.strokeRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+
+                // Add some basic patterns
+                ctx.fillStyle = '#a52a2a';  // Brown
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(centerX - textileWidth / 2 + Math.random() * textileWidth, centerY - textileHeight / 2 + Math.random() * textileHeight, 20, 20);
+                }
+
+            }
+            // Scene 2 (5-10s)
+            else if (time >= 5 && time < 10) {
+                subtitlesDiv.textContent = narration.find(item => item.time === 5).text;
+
+                // Uzbek textile backdrop
+                const textileWidth = 800;
+                const textileHeight = 600;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                ctx.fillStyle = '#cda434';  // Gold color
+                ctx.fillRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.strokeStyle = '#000';  // Black border
+                ctx.lineWidth = 5;
+                ctx.strokeRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.fillStyle = '#a52a2a';  // Brown
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(centerX - textileWidth / 2 + Math.random() * textileWidth, centerY - textileHeight / 2 + Math.random() * textileHeight, 20, 20);
+                }
+
+                // Metallic thread
+                ctx.strokeStyle = '#808080'; // Gray
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(centerX - 200, centerY);
+                ctx.lineTo(centerX + 200, centerY);
+                ctx.stroke();
+            }
+            // Scene 3 (10-15s)
+            else if (time >= 10 && time < 15) {
+                subtitlesDiv.textContent = narration.find(item => item.time === 10).text;
+
+                // Night scene backdrop
+                ctx.fillStyle = '#000020'; // Dark blue
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw stick figure with phone
+                drawStickFigure(canvas.width / 2, canvas.height / 2 + 100, 'idle', 2, 'white');
+
+                // Phone screen
+                ctx.fillStyle = '#00ffff'; // Light blue
+                ctx.fillRect(canvas.width / 2 - 30, canvas.height / 2 + 20, 60, 80);
+            }
+            // Scene 4 (15-20s)
+            else if (time >= 15 && time < 20) {
+                subtitlesDiv.textContent = narration.find(item => item.time === 15).text;
+
+                // Split screen
+                ctx.fillStyle = '#eee';
+                ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+
+                // Money side
+                ctx.fillStyle = 'green';
+                ctx.font = '48px Patrick Hand';
+                ctx.fillText('$ $$$', canvas.width / 4 - 50, canvas.height / 2);
+
+                // Diploma + thermometer
+                ctx.fillStyle = 'lightgrey';
+                ctx.fillRect(canvas.width * 3 / 4 - 50, canvas.height / 2 - 50, 100, 50);
+
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width * 3 / 4 + 20, canvas.height / 2 - 150, 10, 100);
+            }
+            // Scene 5 (20-25s)
+            else if (time >= 20 && time < 25) {
+                subtitlesDiv.textContent = narration.find(item => item.time === 20).text;
+
+                 // Uzbek textile backdrop
+                const textileWidth = 800;
+                const textileHeight = 600;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                ctx.fillStyle = '#cda434';  // Gold color
+                ctx.fillRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.strokeStyle = '#000';  // Black border
+                ctx.lineWidth = 5;
+                ctx.strokeRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.fillStyle = '#a52a2a';  // Brown
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(centerX - textileWidth / 2 + Math.random() * textileWidth, centerY - textileHeight / 2 + Math.random() * textileHeight, 20, 20);
+                }
+
+                // Metallic thread
+                ctx.strokeStyle = '#808080'; // Gray
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(centerX - 400, centerY);
+                ctx.lineTo(centerX + 400, centerY);
+                ctx.stroke();
+            }
+            // Scene 6 (25-30s)
+            else if (time >= 25 && time < 30) {
+                subtitlesDiv.textContent = narration.find(item => item.time === 25).text;
+
+                 // Uzbek textile backdrop
+                const textileWidth = 800;
+                const textileHeight = 600;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                ctx.fillStyle = '#cda434';  // Gold color
+                ctx.fillRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.strokeStyle = '#000';  // Black border
+                ctx.lineWidth = 5;
+                ctx.strokeRect(centerX - textileWidth / 2, centerY - textileHeight / 2, textileWidth, textileHeight);
+                ctx.fillStyle = '#a52a2a';  // Brown
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect(centerX - textileWidth / 2 + Math.random() * textileWidth, centerY - textileHeight / 2 + Math.random() * textileHeight, 20, 20);
+                }
+
+                // Metallic thread
+                ctx.strokeStyle = '#808080'; // Gray
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(centerX - 200, centerY);
+                ctx.lineTo(centerX - 400, centerY);
+                ctx.stroke();
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+            }
+
+            renderScene(currentTime);
+            updateTimeline();
+            updateTimecode();
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playPauseBtn.textContent = 'Pause';
+                startTime = performance.now() - (currentTime * 1000 % (duration * 1000));
+                animationFrameId = requestAnimationFrame(gameLoop);
+            } else {
+                playPauseBtn.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function seekTimeline(event) {
+            const rect = timeline.getBoundingClientRect();
+            const clickPosition = event.clientX - rect.left;
+            const seekTime = (clickPosition / rect.width) * duration;
+            currentTime = seekTime;
+            updateTimeline();
+            updateTimecode();
+            renderScene(currentTime);
+
+             if (isPlaying) {
+                startTime = performance.now() - (currentTime * 1000 % (duration * 1000));
+            }
+        }
+
+        function handleDurationChange() {
+            duration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline();
+            updateTimecode();
+            renderScene(currentTime);
+        }
+
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24); // 24 FPS
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = 'Export Video';
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = 'Stop Export';
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+
+        function toggleRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        // Event listeners
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        timeline.addEventListener('click', seekTimeline);
+        durationSlider.addEventListener('input', handleDurationChange);
+        exportBtn.addEventListener('click', toggleRecording);
+
+        // Initial animation start
+        animationFrameId = requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

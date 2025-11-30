@@ -1,0 +1,459 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cellular Respiration: The Energy Economy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh; /* Ensures the page takes up the full viewport height */
+        }
+        #canvas {
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+        #subtitle-card {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            margin-top: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 80%;
+        }
+        #controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 80%;
+            margin-top: 10px;
+        }
+        #timeline {
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+        #duration-control {
+            margin-top: 10px;
+            width: 80%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #duration-slider {
+            flex-grow: 1;
+            margin-left: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 5px;
+            background: #ddd;
+            border-radius: 5px;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            background: #4CAF50;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        input[type=range]::-moz-range-thumb {
+            width: 15px;
+            height: 15px;
+            background: #4CAF50;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="1920" height="1080"></canvas>
+    <div id="subtitle-card">
+        <p id="subtitle">Welcome to Cellular Respiration: The Energy Economy!</p>
+    </div>
+    <div id="controls">
+        <button id="playPauseBtn">Play</button>
+        <input type="range" id="timeline" min="0" max="30" value="0">
+        <span id="timecode">00:00 / 00:30</span>
+        <button id="exportBtn">Export Video</button>
+    </div>
+    <div id="duration-control">
+        <span>Duration (seconds):</span>
+        <input type="range" id="duration-slider" min="30" max="180" value="30">
+        <span id="duration-value">30</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitle = document.getElementById('subtitle');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timelineSlider = document.getElementById('timeline');
+        const timecodeLabel = document.getElementById('timecode');
+        const exportBtn = document.getElementById('exportBtn');
+        const durationSlider = document.getElementById('duration-slider');
+        const durationValue = document.getElementById('duration-value');
+
+        let animationFrameId;
+        let isPlaying = true;
+        let currentTime = 0;
+        let duration = 30;
+        let isRecording = false;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        durationSlider.addEventListener('input', () => {
+            duration = parseInt(durationSlider.value);
+            durationValue.textContent = duration;
+            timelineSlider.max = duration;
+            timecodeLabel.textContent = formatTime(currentTime) + " / " + formatTime(duration);
+            resetAnimation(); // Reset to beginning after changing duration
+        });
+
+        const narration = [
+            { time: 0, text: "Think of cellular respiration as your body's ultimate value creator, transforming fuel into pure energy." },
+            { time: 3, text: "Just as a company strategically invests resources, cells break down food molecules, like glucose, using a process kickstarted by sunlight hitting leaves." },
+            { time: 6, text: "Imagine zooming into a plant cell, witnessing the first step in action – capturing light energy and storing potential energy." },
+            { time: 9, text: "That potential energy is then unleashed, a chemical cascade inside the cell, converting glucose into ATP." },
+            { time: 12, text: "ATP is the cell's universal currency – a direct investment of energy for everything it does." },
+            { time: 15, text: "This catabolic process carefully breaks down these large molecules, maximizing energy output, just like optimizing a supply chain." },
+            { time: 18, text: "Whether it's aerobic respiration using oxygen, or anaerobic using other compounds, the goal is the same: generating ATP." },
+            { time: 21, text: "Every breath you take, every movement you make, all powered by this cellular engine." },
+            { time: 24, text: "So, explore the world, innovate, and create – knowing that cellular respiration is the fundamental power source fueling your journey!" }
+        ];
+
+        playPauseBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playPauseBtn.textContent = isPlaying ? 'Pause' : 'Play';
+            if (isPlaying) {
+                animate();
+            } else {
+                cancelAnimationFrame(animationFrameId);
+            }
+        });
+
+        timelineSlider.addEventListener('input', () => {
+            currentTime = parseFloat(timelineSlider.value);
+            timecodeLabel.textContent = formatTime(currentTime) + " / " + formatTime(duration);
+            renderScene(currentTime);
+        });
+
+
+        exportBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        function startRecording() {
+            isRecording = true;
+            exportBtn.textContent = "Stop Export";
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cellular_respiration.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                isRecording = false;
+                exportBtn.textContent = "Export Video";
+            };
+
+            mediaRecorder.start();
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+
+        function formatTime(time) {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return String(minutes).padStart(2, '0') + ":" + String(seconds).padStart(2, '0');
+        }
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y -10 * scale, color);
+                    roughLine(x - 30 * scale, y - 10 * scale, x - 50 * scale, y - 10 * scale, color);
+
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y - 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 90 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 70 * scale, color);
+                    break;
+            }
+        }
+
+        function drawGlucose(x, y, scale) {
+            // Simplified glucose molecule
+            ctx.fillStyle = '#FF69B4'; // Hot Pink
+            const atomRadius = 15 * scale;
+            const bondLength = 50 * scale;
+
+            // Carbon atoms
+            ctx.beginPath();
+            ctx.arc(x, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + bondLength, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + bondLength * 2, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+       function drawATP(x, y, scale) {
+            ctx.fillStyle = '#FFD700'; // Gold
+            const atomRadius = 15 * scale;
+            const bondLength = 40 * scale;
+
+            // Adenosine
+            ctx.beginPath();
+            ctx.arc(x, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillText('A', x - 5, y + 5);
+
+            // Phosphates
+            ctx.beginPath();
+            ctx.arc(x + bondLength, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillText('P', x + bondLength - 5, y + 5);
+            ctx.beginPath();
+            ctx.arc(x + bondLength * 2, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+             ctx.fillText('P', x + bondLength * 2 - 5, y + 5);
+             ctx.beginPath();
+            ctx.arc(x + bondLength * 3, y, atomRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillText('P', x + bondLength * 3 - 5, y + 5);
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let currentSubtitle = "";
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    currentSubtitle = narration[i].text;
+                    break;
+                }
+            }
+            subtitle.textContent = currentSubtitle;
+
+            if (time >= 0 && time < 3) {
+                // Scene 1: Person jogging
+                ctx.fillStyle = '#87CEEB'; // Sky Blue
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStickFigure(canvas.width / 2, canvas.height - 200, 'running', 2, 'black');
+            } else if (time >= 3 && time < 6) {
+                // Scene 2: Sunlight through leaves, glucose molecule
+                ctx.fillStyle = '#90EE90'; // Light Green
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawGlucose(canvas.width / 2, canvas.height / 2, 1);
+                ctx.fillStyle = 'yellow';
+                ctx.font = "48px 'Patrick Hand', cursive";
+                ctx.fillText("Glucose", canvas.width / 2 - 50, canvas.height/2 + 100);
+
+            } else if (time >= 6 && time < 9) {
+                // Scene 3: Zoom into plant cell
+                ctx.fillStyle = '#32CD32'; // Lime Green
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStickFigure(canvas.width / 4, canvas.height - 200, 'idle', 1, 'white');
+                ctx.fillStyle = 'white';
+                ctx.fillText("Chloroplast", canvas.width/2, canvas.height/2);
+            } else if (time >= 9 && time < 12) {
+                // Scene 4: Glucose to ATP
+                ctx.fillStyle = '#ADFF2F'; // Green Yellow
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 drawGlucose(canvas.width / 4, canvas.height / 2 - 100, 1);
+                 drawATP(canvas.width / 4 * 3, canvas.height / 2 - 100, 1);
+                 ctx.fillText("ATP", canvas.width/ 4 * 3, canvas.height / 2 + 100);
+                 ctx.fillText("Glucose", canvas.width/ 4, canvas.height / 2 + 100);
+            } else if (time >= 12 && time < 15) {
+                // Scene 5: ATP powering processes
+                ctx.fillStyle = '#FFFF00'; // Yellow
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawATP(canvas.width / 2, canvas.height/2, 2);
+            } else if (time >= 15 && time < 18) {
+                 // Scene 6: Catabolic process/supply chain
+                 ctx.fillStyle = '#FFA500'; // Orange
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawGlucose(canvas.width/2, canvas.height/2, 1);
+                 ctx.fillText("Catabolic Breakdown", canvas.width/2 - 150, canvas.height/2 + 200);
+
+            } else if (time >= 18 && time < 21) {
+                // Scene 7: Aerobic vs. Anaerobic
+                ctx.fillStyle = '#FF4500'; // Orangered
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            } else if (time >= 21 && time < 24) {
+                // Scene 8: Montage of activities
+                ctx.fillStyle = '#DC143C'; // Crimson
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                 drawStickFigure(canvas.width / 4, canvas.height - 200, 'running', 1, 'white');
+                 drawStickFigure(canvas.width / 2, canvas.height - 200, 'idle', 1, 'white');
+                drawStickFigure(canvas.width / 4*3, canvas.height - 200, 'thinking', 1, 'white');
+            }
+             else if (time >= 24) {
+                // Scene 9: Innovation
+                ctx.fillStyle = '#800000'; // Maroon
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = "72px 'Patrick Hand', cursive";
+                ctx.fillStyle = 'white';
+                ctx.fillText("Innovate and Create!", canvas.width / 4, canvas.height / 2);
+            }
+        }
+
+        let dt = 0;
+        let lastTime = 0;
+        const targetFrameRate = 30; // Frames per second
+
+        function animate(currentTimeMs) {
+            animationFrameId = requestAnimationFrame(animate);
+
+            const currentTimeS = currentTimeMs / 1000; // Convert milliseconds to seconds
+            const deltaTime = (currentTimeS - lastTime); // Get the elapsed time since the last frame
+
+            dt += deltaTime;
+
+            const frameDuration = 1 / targetFrameRate; // Calculate the target duration of each frame
+            if (dt >= frameDuration) {
+                currentTime += frameDuration; // Advance the currentTime by the target frame duration
+
+                // Ensure currentTime doesn't exceed the duration
+                if (currentTime > duration) {
+                    currentTime = 0; // Reset to the beginning
+                    isPlaying = false;
+                    playPauseBtn.textContent = 'Play';
+                }
+                timelineSlider.value = currentTime;
+                timecodeLabel.textContent = formatTime(currentTime) + " / " + formatTime(duration);
+                renderScene(currentTime);
+                dt -= frameDuration; // Subtract the frame duration, accounting for any extra time
+                lastTime = currentTimeS;
+            }
+
+        }
+
+        function resetAnimation() {
+            currentTime = 0;
+            timelineSlider.value = 0;
+            timecodeLabel.textContent = formatTime(currentTime) + " / " + formatTime(duration);
+            renderScene(currentTime);
+            if (!isPlaying) {
+                 cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        // Initial render
+        resetAnimation();
+    </script>
+</body>
+</html>

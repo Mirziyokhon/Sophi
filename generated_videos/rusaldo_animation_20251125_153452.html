@@ -1,0 +1,521 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Glucose: The Sweet Spark of Life!</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #subtitles {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            text-align: center;
+            font-size: 36px;
+            color: #333;
+            z-index: 2;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(200, 200, 200, 0.5);
+            padding: 10px;
+            text-align: center;
+            z-index: 3;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #4CAF50;
+            width: 0;
+        }
+
+        #timecode {
+            display: inline-block;
+            width: 80px;
+            text-align: center;
+        }
+
+        input[type=range] {
+          -webkit-appearance: none;
+          width: 150px;
+          margin-bottom: 7px;
+          background: transparent;
+        }
+
+        input[type=range]:focus {
+          outline: none;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+          width: 100%;
+          height: 5px;
+          cursor: pointer;
+          animate: 0.2s;
+          background: #3071a9;
+          border-radius: 1.3px;
+          border: 0.2px solid #010101;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+          border: 1px solid #000000;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #ffffff;
+          cursor: pointer;
+          -webkit-appearance: none;
+          margin-top: -7px;
+        }
+
+        input[type=range]:focus::-webkit-slider-runnable-track {
+          background: #367ebd;
+        }
+
+        input[type=range]::-moz-range-track {
+          width: 100%;
+          height: 5px;
+          cursor: pointer;
+          animate: 0.2s;
+          background: #3071a9;
+          border-radius: 1.3px;
+          border: 0.2px solid #010101;
+        }
+
+        input[type=range]::-moz-range-thumb {
+          border: 1px solid #000000;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #ffffff;
+          cursor: pointer;
+        }
+
+        input[type=range]::-ms-track {
+          width: 100%;
+          height: 5px;
+          cursor: pointer;
+          animate: 0.2s;
+          background: transparent;
+          border-color: transparent;
+          color: transparent;
+        }
+
+        input[type=range]::-ms-fill-lower {
+          background: #3071a9;
+          border: 0.2px solid #010101;
+          border-radius: 2.6px;
+        }
+
+        input[type=range]::-ms-fill-upper {
+          background: #3071a9;
+          border: 0.2px solid #010101;
+          border-radius: 2.6px;
+        }
+
+        input[type=range]::-ms-thumb {
+          border: 1px solid #000000;
+          height: 20px;
+          width: 20px;
+          border-radius: 50%;
+          background: #ffffff;
+          cursor: pointer;
+        }
+
+        input[type=range]:focus::-ms-fill-lower {
+          background: #367ebd;
+        }
+
+        input[type=range]:focus::-ms-fill-upper {
+          background: #367ebd;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <div id="timeline">
+                <div id="timeline-progress"></div>
+            </div>
+            <span id="timecode">00:00 / 00:30</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timelineProgress = document.getElementById('timeline-progress');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let startTime;
+        let paused = false;
+        let currentTime = 0;
+        let duration = 30;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        const narration = [
+            { time: 0, text: "Imagine the sweetest melody, a catchy tune that keeps you energized all day." },
+            { time: 3, text: "That’s kinda like glucose, the simplest sugar, fueling everything from your brain to your biceps." },
+            { time: 6, text: "Plants are like nature's DJs, remixing sunlight into glucose through photosynthesis, creating pure energy." },
+            { time: 9, text: "Inside their cells, tiny powerhouses called chloroplasts capture light, driving this amazing transformation." },
+            { time: 12, text: "These sugar molecules then link together, creating energy-rich storage like musical building blocks, stored as starch." },
+            { time: 15, text: "When you eat that apple or that slice of bread, you're tapping into this stored sunshine." },
+            { time: 18, text: "This glucose enters your bloodstream, turning into 'blood sugar', ready to power every beat of your heart, every thought in your head." },
+            { time: 21, text: "Glucose: the sweet spark fueling life on Earth!" },
+            { time: 24, text: "So, next time you listen to your favorite song, remember the energy that makes it all possible." },
+            { time: 27, text: "Unleash your inner rhythm by celebrating the energy that powers life, because without life, there's no art!?" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2 + Math.random() * 3 - Math.random() * 3, y2 + Math.random() * 3 - Math.random() * 3);
+            ctx.strokeStyle = color;
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+                roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                roughLine(x, y, x + 30 * scale, y - 20 * scale, color);
+            } else if (pose === 'thinking') {
+                roughLine(x, y, x - 20 * scale, y - 10 * scale, color);
+                roughLine(x, y, x + 20 * scale, y - 10 * scale, color);
+            }
+            else {
+              roughLine(x, y, x - 30 * scale, y, color);
+              roughLine(x, y, x + 30 * scale, y, color);
+            }
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 90 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 70 * scale, color);
+            } else {
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 80 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 80 * scale, color);
+            }
+        }
+
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let subtitle = "";
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < narration[i].time + 3) {
+                    subtitle = narration[i].text;
+                    break;
+                }
+            }
+            subtitlesDiv.textContent = subtitle;
+
+            if (time >= 0 && time < 3) {
+                // Scene 1: Sugar crystals and piano
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                for (let i = 0; i < 50; i++) {
+                    ctx.fillStyle = `rgba(255,255,200,${Math.random()})`;
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const size = Math.random() * 10 + 5;
+                    ctx.fillRect(x, y, size, size);
+                }
+
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(100, canvas.height - 300, 200, 200); // Piano body
+                ctx.fillStyle = '#000';
+                for (let i = 0; i < 10; i++) {
+                    ctx.fillRect(100 + i * 20, canvas.height - 100, 15, 100); // Piano keys
+                }
+
+            } else if (time >= 3 && time < 6) {
+                // Scene 2: Dancing person and brain
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStickFigure(canvas.width / 4, canvas.height / 2, 'running', 3, 'blue');
+
+                ctx.fillStyle = 'yellow';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 3 / 4, canvas.height / 2, 50, 0, 2 * Math.PI);
+                ctx.fill();
+
+            } else if (time >= 6 && time < 9) {
+                // Scene 3: Sunlight and leaves
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'yellow';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, 100, 60, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'green';
+                for (let i = 0; i < 10; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height / 2 + canvas.height / 2;
+                    ctx.fillRect(x, y, 20, 20);
+                }
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = 2;
+                for (let i=0; i<5; ++i) {
+                    ctx.beginPath();
+                    ctx.moveTo(canvas.width / 2, 160);
+                    ctx.lineTo(Math.random()*canvas.width, Math.random()*canvas.height/2);
+                    ctx.stroke();
+                }
+            } else if (time >= 9 && time < 12) {
+                // Scene 4: Chloroplasts
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'green';
+                for (let i = 0; i < 20; i++) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, 30, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+            } else if (time >= 12 && time < 15) {
+                // Scene 5: Glucose linking to starch
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "red";
+                for (let i=0; i<10; ++i) {
+                    ctx.beginPath();
+                    ctx.arc(100 + i*100, canvas.height/2 + Math.sin(i+time)*30, 30, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+            } else if (time >= 15 && time < 18) {
+                // Scene 6: Apple and bread
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 4, canvas.height / 2, 50, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(canvas.width * 3 / 4 - 50, canvas.height / 2 - 25, 100, 50);
+            } else if (time >= 18 && time < 21) {
+                // Scene 7: Bloodstream and heart
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'red';
+                for (let i = 0; i < 20; i++) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random() * canvas.width, canvas.height / 2 + Math.sin(i+time)*50, 15, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                ctx.fillStyle = "pink";
+                ctx.beginPath();
+                ctx.moveTo(100, 500);
+                ctx.bezierCurveTo(100, 300, 400, 300, 400, 500);
+                ctx.bezierCurveTo(400, 700, 100, 700, 100, 500);
+                ctx.fill();
+
+            } else if (time >= 21 && time < 24) {
+                // Scene 8: Earth music box
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 100, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'blue';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 80, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(canvas.width/2 - 10, canvas.height/2 + 100, 20, 50);
+
+            } else if (time >= 24 && time < 27) {
+                // Scene 9: Student with headphones
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStickFigure(canvas.width / 2, canvas.height / 2, 'thinking', 3, 'purple');
+
+                ctx.fillStyle = 'black';
+                ctx.fillRect(canvas.width / 2 - 50, canvas.height / 2 - 100, 100, 20);
+            } else if (time >= 27 && time < 30) {
+                // Scene 10: Student playing instrument
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawStickFigure(canvas.width / 2, canvas.height / 2, 'running', 3, 'orange');
+                ctx.fillStyle = "black";
+                for(let i=0; i<10; ++i) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random()*canvas.width, Math.random()*canvas.height/2, 10, 0, 2*Math.PI);
+                    ctx.fill();
+                }
+
+            }
+
+            const progress = time / duration;
+            timelineProgress.style.width = progress * 100 + '%';
+
+            const currentMinutes = Math.floor(time / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(time % 60).toString().padStart(2, '0');
+            const durationMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const durationSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecodeDisplay.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+        }
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+            }
+
+            renderScene(currentTime);
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function playPause() {
+            paused = !paused;
+            if (paused) {
+                cancelAnimationFrame(animationFrameId);
+                playPauseBtn.textContent = 'Play';
+            } else {
+                startTime = performance.now() - (currentTime * 1000);
+                animationFrameId = requestAnimationFrame(animationLoop);
+                playPauseBtn.textContent = 'Pause';
+            }
+        }
+
+        function seek(event) {
+            const rect = timeline.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const progress = x / rect.width;
+            currentTime = progress * duration;
+            renderScene(currentTime);
+        }
+
+        playPauseBtn.addEventListener('click', playPause);
+        timeline.addEventListener('click', seek);
+
+        durationSlider.addEventListener('input', () => {
+            duration = parseInt(durationSlider.value);
+            currentTime = 0;
+            renderScene(0);
+        });
+
+        function startRecording() {
+            isRecording = true;
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = "Export Video";
+                isRecording = false;
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = "Stop Export";
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+        exportBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        animationLoop();
+    </script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Glucose Explained</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333;
+            font-size: 32px;
+            text-align: center;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            margin: 5px auto;
+        }
+
+        #timecode {
+            display: inline-block;
+            width: 100px;
+            text-align: center;
+        }
+
+        #durationControl {
+            width: 10%;
+            margin: 5px;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timeline" value="0" step="0.01">
+            <span id="timecode">00:00 / 00:30</span>
+            <label for="durationControl">Duration (s):</label>
+            <input type="number" id="durationControl" value="30" min="30" max="180">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timecode = document.getElementById('timecode');
+        const durationControl = document.getElementById('durationControl');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let isPlaying = true;
+        let startTime;
+        let currentTime = 0;
+        let duration = 30;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+
+        // Narration array
+        const narration = [
+            { time: 0, text: "Imagine baking the perfect cake: it needs the right fuel!" },
+            { time: 5, text: "Plants, like tiny bakeries, use sunlight as their oven to bake glucose, a simple sugar that's their main ingredient." },
+            { time: 10, text: "Deep inside their leaves, water and carbon dioxide get transformed into this sugary fuel." },
+            { time: 15, text: "Plants store glucose as starch, just like a pantry stocked with flour, while we animals use it as blood sugar, circulating energy throughout our bodies." },
+            { time: 20, text: "Glucose: it's sweet, it's essential, and it powers life!" },
+            { time: 25, text: "Now go explore the sweetness of science, one bite at a time!" }
+        ];
+
+        // Utility functions
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 70 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 70 * scale, color);
+
+                    // Hand on chin
+                    ctx.beginPath();
+                    ctx.arc(x - 30 * scale, y + 10 * scale + (10 * scale), 5 * scale, 0, 2 * Math.PI);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    break;
+
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y - 10 * scale, x - 40 * scale, y - 20 * scale, color);
+                    roughLine(x, y - 10 * scale, x + 40 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 60 * scale, color);
+                    break;
+            }
+        }
+
+        // Scene rendering function
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1: Cake and Wheat
+                ctx.fillStyle = '#FDD7E4';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Baking Cake Analogy
+                ctx.font = '80px "Patrick Hand", cursive';
+                ctx.fillStyle = '#E67E22';
+                ctx.textAlign = 'center';
+                ctx.fillText("Baking Needs Fuel!", canvas.width / 2, canvas.height / 2 - 50);
+
+                drawStickFigure(1700, 900, 'idle', 1.5, 'black'); //Idle figure
+
+            } else if (time >= 5 && time < 10) {
+                // Scene 2: Plant Bakery
+                ctx.fillStyle = '#A3E4D7';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.font = '60px "Patrick Hand", cursive';
+                ctx.fillStyle = '#2ECC71';
+                ctx.textAlign = 'center';
+                ctx.fillText("Plants: Tiny Bakeries!", canvas.width / 2, canvas.height / 2 - 50);
+
+                drawStickFigure(1700, 900, 'thinking', 1.5, 'black'); // Thinking figure
+
+            } else if (time >= 10 && time < 15) {
+                 // Scene 3: CO2 + H2O -> Glucose
+                ctx.fillStyle = '#AED6F1';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Glucose Formation
+                ctx.font = '60px "Patrick Hand", cursive';
+                ctx.fillStyle = '#3498DB';
+                ctx.textAlign = 'center';
+                ctx.fillText("CO2 + H2O -> Glucose", canvas.width / 2, canvas.height / 2 - 50);
+
+                drawStickFigure(1700, 900, 'idle', 1.5, 'black');
+
+            } else if (time >= 15 && time < 20) {
+                // Scene 4: Starch and Blood Sugar
+                ctx.fillStyle = '#F9E79F';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Starch and Blood Sugar
+                ctx.font = '60px "Patrick Hand", cursive';
+                ctx.fillStyle = '#F1C40F';
+                ctx.textAlign = 'center';
+                ctx.fillText("Starch & Blood Sugar", canvas.width / 2, canvas.height / 2 - 50);
+
+                drawStickFigure(1700, 900, 'idle', 1.5, 'black');
+
+            } else if (time >= 20 && time < 25) {
+                // Scene 5: Powering Life
+                ctx.fillStyle = '#FAD7A0';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Powering Life
+                ctx.font = '80px "Patrick Hand", cursive';
+                ctx.fillStyle = '#E67E22';
+                ctx.textAlign = 'center';
+                ctx.fillText("Powering Life!", canvas.width / 2, canvas.height / 2 - 50);
+
+                drawStickFigure(1700, 900, 'running', 1.5, 'black'); // Running Figure
+
+            } else if (time >= 25 && time < 30) {
+                // Scene 6: Explore Science
+                ctx.fillStyle = '#D2B4DE';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Explore Science
+                ctx.font = '80px "Patrick Hand", cursive';
+                ctx.fillStyle = '#8E44AD';
+                ctx.textAlign = 'center';
+                ctx.fillText("Explore Science!", canvas.width / 2, canvas.height / 2 - 50);
+
+                drawStickFigure(1700, 900, 'idle', 1.5, 'black'); // Idle Figure
+            }
+
+            //Subtitle Display
+            let currentSubtitle = narration.find(item => time >= item.time && time < item.time + 5);
+            subtitlesDiv.textContent = currentSubtitle ? currentSubtitle.text : '';
+        }
+
+
+        // Animation loop
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+            }
+
+            renderScene(currentTime);
+            timeline.value = currentTime;
+            updateTimecode();
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // Play/Pause functionality
+        playPauseBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                cancelAnimationFrame(animationFrameId);
+                playPauseBtn.textContent = 'Play';
+            } else {
+                startTime = null;
+                animate();
+                playPauseBtn.textContent = 'Pause';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        // Timeline control
+        timeline.addEventListener('input', () => {
+            currentTime = parseFloat(timeline.value);
+            renderScene(currentTime);
+            updateTimecode();
+            startTime = null;
+        });
+
+        //Timecode update
+        function updateTimecode() {
+            const currentMinutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const currentSeconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const durationMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const durationSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecode.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+        }
+
+       // Duration control
+        durationControl.addEventListener('change', () => {
+            duration = parseInt(durationControl.value);
+            timeline.max = duration;
+            updateTimecode();
+        });
+
+        // Export Video functionality
+       exportBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                recordedChunks = [];
+                const stream = canvas.captureStream(24); // 24 FPS
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'glucose_animation.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    exportBtn.textContent = 'Export Video';
+                    isRecording = false;
+                };
+
+                mediaRecorder.start();
+                exportBtn.textContent = 'Stop Export';
+                isRecording = true;
+            } else {
+                mediaRecorder.stop();
+            }
+        });
+
+
+        // Initial setup
+        timeline.max = duration;
+        updateTimecode();
+        animate();
+    </script>
+</body>
+</html>

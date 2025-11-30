@@ -1,0 +1,494 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glucose: The Energy Power Chord!</title>
+  <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #fffcf5;
+      font-family: 'Patrick Hand', cursive;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #container {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+    }
+
+    canvas {
+      background-color: #fffcf5;
+      display: block;
+    }
+
+    #subtitles {
+      position: absolute;
+      top: 900px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      text-align: center;
+      font-size: 32px;
+      color: #333;
+    }
+
+    #controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background-color: rgba(255, 252, 245, 0.8);
+      padding: 10px;
+      text-align: center;
+    }
+
+    #timeline {
+      width: 70%;
+      height: 10px;
+      background-color: #ddd;
+      cursor: pointer;
+      display: inline-block;
+    }
+
+    #timeline-progress {
+      height: 10px;
+      background-color: #4CAF50;
+      width: 0;
+    }
+
+    button {
+      padding: 8px 12px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 0 5px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+    }
+
+
+    input[type="range"] {
+      width: 100px;
+    }
+
+    #timecode {
+        display: inline-block;
+        width: 80px;
+        text-align: center;
+    }
+
+  </style>
+</head>
+<body>
+  <div id="container">
+    <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+    <div id="subtitles"></div>
+    <div id="controls">
+        <button id="playPauseBtn">Play</button>
+        <div id="timeline">
+            <div id="timeline-progress"></div>
+        </div>
+        <span id="timecode">00:00 / 00:00</span>
+        <label for="duration">Duration (s):</label>
+        <input type="range" id="duration" min="30" max="180" value="30">
+        <button id="exportBtn">Export Video</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('animationCanvas');
+    const ctx = canvas.getContext('2d');
+    const subtitlesDiv = document.getElementById('subtitles');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const timeline = document.getElementById('timeline');
+    const timelineProgress = document.getElementById('timeline-progress');
+    const timecodeDisplay = document.getElementById('timecode');
+    const durationSlider = document.getElementById('duration');
+    const exportBtn = document.getElementById('exportBtn');
+
+    let animationDuration = parseInt(durationSlider.value);
+    let startTime = null;
+    let running = false;
+    let currentTime = 0;
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    const narration = [
+      { time: 0, text: "Imagine glucose is the ultimate power chord, fueling every living thing!" },
+      { time: 3, text: "Plants are the rockstars, using sunlight to compose glucose from water and carbon dioxide." },
+      { time: 6, text: "Picture sunlight hitting leaves, triggering a magical reaction inside tiny compartments." },
+      { time: 9, text: "These sugar molecules then link together, creating energy-rich starches for the plant's encore performance." },
+      { time: 12, text: "Now zoom in to see glucose being transported like the vital blood of the Earth." },
+      { time: 15, text: "Animals also need glucose so it travels through the blood as energy..." },
+      { time: 18, text: "...and gets stored as glycogen, ready for your next awesome move." },
+      { time: 21, text: "So next time you're feeling that energy rush, remember glucose: the sweet fuel that powers life, from plants to you!" },
+      { time: 26, text: "Now go create your own symphony of life!" },
+    ];
+
+    durationSlider.addEventListener('input', () => {
+        animationDuration = parseInt(durationSlider.value);
+    });
+
+    function roughLine(x1, y1, x2, y2, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+      ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+      ctx.stroke();
+    }
+
+    function drawStickFigure(x, y, pose, scale, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 5;
+
+      switch (pose) {
+        case 'idle':
+          // Head
+          ctx.beginPath();
+          ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+          ctx.stroke();
+
+          // Body
+          roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+          // Arms
+          roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+          roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+          // Legs
+          roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+          roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+          break;
+
+        case 'thinking':
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+            // Arms
+            roughLine(x, y - 10*scale, x - 30 * scale, y - 30 * scale, color);
+            roughLine(x, y - 10*scale, x + 30 * scale, y - 30 * scale, color);
+
+            // Legs
+            roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+            roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+            break;
+
+        case 'running':
+          // Head
+          ctx.beginPath();
+          ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+          ctx.stroke();
+
+          // Body
+          roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+          // Arms
+          roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+          roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+          // Legs
+          roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+          roughLine(x, y + 50 * scale, x + 30 * scale, y + 120 * scale, color);
+          break;
+      }
+    }
+
+    function renderScene(time) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (time >= 0 && time < 3) {
+        // Scene 1: Forest Canopy
+        ctx.fillStyle = '#228B22';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < 100; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 20 + 10;
+            ctx.fillStyle = `rgba(255, 255, 0, ${Math.random() * 0.3})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+      } else if (time >= 3 && time < 6) {
+        // Scene 2: Chloroplast
+        ctx.fillStyle = '#3CB371';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw simplified chloroplast
+        ctx.fillStyle = '#008000';
+        ctx.beginPath();
+        ctx.ellipse(canvas.width / 2, canvas.height / 2, 200, 100, 0, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Water and CO2 molecules
+        ctx.fillStyle = '#ADD8E6';
+        ctx.fillRect(200, 300, 20, 20);
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(1500, 700, 20, 20);
+      } else if (time >= 6 && time < 9) {
+        // Scene 3: Chemical Reaction
+        ctx.fillStyle = '#90EE90';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Simplified glucose and oxygen molecules
+        ctx.fillStyle = '#FFFF00';
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2 - 100, canvas.height / 2, 30, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = '#FF0000';
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2 + 100, canvas.height / 2, 30, 0, 2 * Math.PI);
+        ctx.fill();
+      } else if (time >= 9 && time < 12) {
+        // Scene 4: Starch Formation
+        ctx.fillStyle = '#FAFAD2';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Glucose molecules linking
+        for (let i = 0; i < 10; i++) {
+          ctx.fillStyle = '#FFFF00';
+          ctx.beginPath();
+          ctx.arc(200 + i * 70, canvas.height / 2, 20, 0, 2 * Math.PI);
+          ctx.fill();
+          if (i > 0) {
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(200 + (i - 1) * 70 + 20, canvas.height / 2);
+            ctx.lineTo(200 + i * 70 - 20, canvas.height / 2);
+            ctx.stroke();
+          }
+        }
+      } else if (time >= 12 && time < 15) {
+        // Scene 5: Glucose Transport
+        ctx.fillStyle = '#8FBC8F';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Phloem depiction
+        ctx.fillStyle = '#A0522D';
+        ctx.fillRect(100, 100, 50, 800);
+        ctx.fillRect(1750, 100, 50, 800);
+
+        // Glucose moving
+        for (let i = 0; i < 5; i++) {
+          ctx.fillStyle = '#FFFF00';
+          ctx.beginPath();
+          ctx.arc(125, 200 + i * 150, 15, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+        for (let i = 0; i < 5; i++) {
+          ctx.fillStyle = '#FFFF00';
+          ctx.beginPath();
+          ctx.arc(1775, 200 + i * 150, 15, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      } else if (time >= 15 && time < 18) {
+        // Scene 6: Glucose in Blood
+        ctx.fillStyle = '#DC143C';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Glucose molecules in blood
+        for (let i = 0; i < 20; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          ctx.fillStyle = '#FFFF00';
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      } else if (time >= 18 && time < 21) {
+        // Scene 7: Glycogen Storage
+        ctx.fillStyle = '#F08080';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Glycogen structure
+        for (let i = 0; i < 15; i++) {
+          ctx.fillStyle = '#FFFF00';
+          ctx.beginPath();
+          ctx.arc(canvas.width / 2 + Math.cos(i) * 200, canvas.height / 2 + Math.sin(i) * 200, 15, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      } else if (time >= 21 && time < 26) {
+        // Scene 8: Montage
+        ctx.fillStyle = '#ADD8E6';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Plant growing
+        ctx.fillStyle = '#008000';
+        ctx.fillRect(200, 700, 50, 100);
+
+        // Person Playing Guitar
+        drawStickFigure(canvas.width / 2, 750, 'running', 1.5, '#000000');
+
+        // Bird Soaring
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.moveTo(1600, 200);
+        ctx.lineTo(1650, 150);
+        ctx.lineTo(1700, 200);
+        ctx.stroke();
+      } else if (time >= 26 && time < 30) {
+        // Scene 9: Music Composition
+        ctx.fillStyle = '#D8BFD8';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Person composing music
+        drawStickFigure(canvas.width / 2, 750, 'thinking', 2, '#000000');
+
+        ctx.fillStyle = '#800080';
+        ctx.fillRect(canvas.width / 2 - 200, 850, 400, 50);
+      }
+    }
+
+    function updateSubtitles(time) {
+      for (let i = narration.length - 1; i >= 0; i--) {
+        if (time >= narration[i].time) {
+          subtitlesDiv.textContent = narration[i].text;
+          return;
+        }
+      }
+      subtitlesDiv.textContent = '';
+    }
+
+    function updateTimeline(time) {
+        const progress = (time / animationDuration) * 100;
+        timelineProgress.style.width = `${progress}%`;
+    }
+
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        const formattedMinutes = String(minutes).padStart(2, '0');
+        const formattedSeconds = String(remainingSeconds).padStart(2, '0');
+        return `${formattedMinutes}:${formattedSeconds}`;
+    }
+
+    function updateTimecode(time) {
+        timecodeDisplay.textContent = `${formatTime(time)} / ${formatTime(animationDuration)}`;
+    }
+
+    function animate(timestamp) {
+      if (!running) return;
+      if (!startTime) startTime = timestamp;
+
+      const dt = (timestamp - startTime) / 1000;
+      startTime = timestamp;
+      currentTime += dt;
+
+      if (currentTime > animationDuration) {
+          currentTime = animationDuration;
+          running = false;
+          playPauseBtn.textContent = 'Play';
+      }
+
+      renderScene(currentTime);
+      updateSubtitles(currentTime);
+      updateTimeline(currentTime);
+      updateTimecode(currentTime);
+
+      requestAnimationFrame(animate);
+    }
+
+    function togglePlayPause() {
+      running = !running;
+      if (running) {
+        playPauseBtn.textContent = 'Pause';
+        startTime = null;
+        requestAnimationFrame(animate);
+      } else {
+        playPauseBtn.textContent = 'Play';
+      }
+    }
+
+    playPauseBtn.addEventListener('click', togglePlayPause);
+
+    timeline.addEventListener('click', (e) => {
+        const rect = timeline.getBoundingClientRect();
+        const clickPosition = e.clientX - rect.left;
+        const newTime = (clickPosition / rect.width) * animationDuration;
+        currentTime = newTime;
+        renderScene(currentTime);
+        updateSubtitles(currentTime);
+        updateTimeline(currentTime);
+        updateTimecode(currentTime);
+    });
+
+
+    // Export Video Functionality
+    exportBtn.addEventListener('click', () => {
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    });
+
+    function startRecording() {
+        recordedChunks = [];
+        const stream = canvas.captureStream(24);
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+        mediaRecorder.ondataavailable = handleDataAvailable;
+        mediaRecorder.onstop = handleStop;
+
+        mediaRecorder.start();
+        exportBtn.textContent = 'Stop Export';
+        playPauseBtn.disabled = true;
+        durationSlider.disabled = true;
+    }
+
+    function stopRecording() {
+        mediaRecorder.stop();
+        exportBtn.textContent = 'Export Video';
+        playPauseBtn.disabled = false;
+        durationSlider.disabled = false;
+    }
+
+    function handleDataAvailable(event) {
+        if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+        }
+    }
+
+    function handleStop() {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'glucose_animation.webm';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        mediaRecorder = null;
+    }
+
+
+    // Initial setup
+    renderScene(0);
+    updateSubtitles(0);
+    updateTimecode(0);
+
+  </script>
+</body>
+</html>

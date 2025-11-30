@@ -1,0 +1,492 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gibberellins: Plant Growth Orchestrators</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            background-color: #fffcf5;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 880px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(220, 220, 220, 0.7);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            margin: 5px;
+        }
+
+        button {
+            padding: 5px 10px;
+            margin: 5px;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 16px;
+        }
+
+        #timecode {
+            margin: 5px;
+            font-size: 16px;
+        }
+
+        #durationSlider {
+            width: 10%;
+            margin: 5px;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timeline" value="0" step="0.01">
+            <span id="timecode">00:00 / 00:00</span>
+            <label for="durationSlider">Duration (s):</label>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitles = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timecode = document.getElementById('timecode');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let startTime;
+        let paused = false;
+        let duration = 30; // Default duration
+        let mediaRecorder;
+        let recordedChunks = [];
+        let recording = false;
+
+        const narration = [
+            { time: 0, text: "Imagine a world without enough food." },
+            { time: 3, text: "Gibberellins, or GAs, tiny plant hormones, helped avert that crisis during the Green Revolution!" },
+            { time: 6, text: "These master regulators orchestrate everything from seed sprouting to flower blooming." },
+            { time: 8, text: "Sunlight fuels the creation of GAs, complex diterpenoid acids synthesized within plant cells." },
+            { time: 11, text: "Each GA, of over 130 different types, is like a specialized tool for growth." },
+            { time: 16, text: "Some are biological powerhouses, directing stem elongation and boosting crop yields." },
+            { time: 21, text: "The future of food security rests on understanding these GA 'conductors' and their potential." },
+            { time: 27, text: "What new harmonies can we compose for a thriving planet?" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            const wobbleFactor = 3;
+            let dx = x2 - x1;
+            let dy = y2 - y1;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            let stepX = dx / dist;
+            let stepY = dy / dist;
+
+            let currentX = x1;
+            let currentY = y1;
+
+            ctx.moveTo(currentX + Math.random() * wobbleFactor - wobbleFactor / 2, currentY + Math.random() * wobbleFactor - wobbleFactor / 2);
+
+            for (let i = 0; i < dist; i += 5) {
+                currentX += stepX * 5;
+                currentY += stepY * 5;
+                ctx.lineTo(currentX + Math.random() * wobbleFactor - wobbleFactor / 2, currentY + Math.random() * wobbleFactor - wobbleFactor / 2);
+            }
+
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms (crossed)
+                    roughLine(x - 20 * scale, y + 20 * scale, x + 20 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+
+                     // Thinking bubble
+                     ctx.beginPath();
+                     ctx.arc(x - 50 * scale, y - 100 * scale, 30 * scale, 0, 2 * Math.PI);
+                     ctx.stroke();
+                     ctx.fillStyle = '#fff';
+                     ctx.fill();
+
+                    break;
+
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y + 40 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 120 * scale, color);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let currentSubtitle = "";
+
+            if (time >= 0 && time < 3) {
+                currentSubtitle = narration[0].text;
+                // Scene 1: Dustbowl to Green Fields
+                const dustColor = `rgba(164,136,107,${1-time/3})`;
+                ctx.fillStyle = dustColor;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const greenColor = `rgba(107,164,107,${time/3})`;
+                ctx.fillStyle = greenColor;
+                ctx.fillRect(0,0,canvas.width, canvas.height);
+
+            } else if (time >= 3 && time < 6) {
+                currentSubtitle = narration[1].text;
+                // Scene 2: Rice Seed Germination
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                const seedSize = 20 + (time - 3) * 30;
+                ctx.fillStyle = 'brown';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, seedSize, 0, 2 * Math.PI);
+                ctx.fill();
+
+                const sproutHeight = (time - 3) * 50;
+                ctx.strokeStyle = 'green';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2, canvas.height / 2 - seedSize);
+                ctx.lineTo(canvas.width / 2, canvas.height / 2 - seedSize - sproutHeight);
+                ctx.stroke();
+
+            } else if (time >= 6 && time < 8) {
+                currentSubtitle = narration[2].text;
+                // Scene 3: Time-lapse Plant Growth
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                const plantHeight = 50 + (time - 6) * 200;
+                ctx.fillStyle = 'green';
+                ctx.fillRect(canvas.width / 2 - 20, canvas.height - plantHeight, 40, plantHeight);
+                drawStickFigure(100, 600, 'idle', 1, 'blue');
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(100, 600);
+                ctx.lineTo(100, canvas.height - plantHeight);
+                ctx.stroke();
+
+            } else if (time >= 8 && time < 11) {
+                currentSubtitle = narration[3].text;
+                // Scene 4: Sunlight and Chloroplasts
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                const sunX = canvas.width / 4;
+                const sunY = canvas.height / 4;
+                const sunRadius = 50;
+                ctx.fillStyle = 'yellow';
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, sunRadius, 0, 2 * Math.PI);
+                ctx.fill();
+
+                for (let i = 0; i < 10; i++) {
+                    const leafX = canvas.width / 2 + Math.random() * canvas.width / 2 - canvas.width / 4;
+                    const leafY = canvas.height / 2 + Math.random() * canvas.height / 2 - canvas.height / 4;
+                    ctx.fillStyle = 'green';
+                    ctx.fillRect(leafX, leafY, 30, 20);
+                    ctx.strokeStyle = 'orange';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(sunX, sunY);
+                    ctx.lineTo(leafX + 15, leafY + 10);
+                    ctx.stroke();
+                }
+            } else if (time >= 11 && time < 16) {
+                currentSubtitle = narration[4].text;
+                 // Scene 5: GA Molecular Structures
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const numGAs = 5;
+                for (let i = 0; i < numGAs; i++) {
+                    const gaX = (i + 1) * canvas.width / (numGAs + 1);
+                    const gaY = canvas.height / 2;
+                    const gaSize = 50;
+                    ctx.strokeStyle = 'purple';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(gaX, gaY, gaSize, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.font = '20px Patrick Hand';
+                    ctx.fillStyle = 'black';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`GA${i + 1}`, gaX, gaY + gaSize + 20);
+                }
+
+            } else if (time >= 16 && time < 21) {
+                currentSubtitle = narration[5].text;
+                // Scene 6: GA Deficiency vs. Adequate GA
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Deficient Plant
+                ctx.fillStyle = 'red';
+                ctx.fillRect(canvas.width / 4 - 20, canvas.height - 100, 40, 100);
+
+                // Adequate Plant
+                ctx.fillStyle = 'green';
+                ctx.fillRect(3 * canvas.width / 4 - 20, canvas.height - 300, 40, 300);
+                drawStickFigure(canvas.width / 4, 600, 'thinking', 1, 'blue');
+                drawStickFigure(3 * canvas.width / 4, 600, 'idle', 1, 'blue');
+
+            } else if (time >= 21 && time < 27) {
+                currentSubtitle = narration[6].text;
+                // Scene 7: Researchers and Farmers
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Researchers
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(canvas.width / 4 - 50, canvas.height - 150, 100, 150);
+                drawStickFigure(canvas.width / 4, 600, 'idle', 1, 'blue');
+
+                // Farmers
+                ctx.fillStyle = 'orange';
+                ctx.fillRect(3 * canvas.width / 4 - 50, canvas.height - 200, 100, 200);
+                drawStickFigure(3*canvas.width/4, 600, 'running', 1, 'blue');
+
+
+            } else if (time >= 27 && time <= 30) {
+                currentSubtitle = narration[7].text;
+                // Scene 8: Global View of Earth
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const earthX = canvas.width / 2;
+                const earthY = canvas.height / 2;
+                const earthRadius = 200;
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(earthX, earthY, earthRadius, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = 'blue';
+                ctx.beginPath();
+                ctx.arc(earthX, earthY, earthRadius, 0, Math.PI);
+                ctx.fill();
+            } else {
+                currentSubtitle = "";
+            }
+
+            subtitles.textContent = currentSubtitle;
+        }
+
+        function updateTimeline(time) {
+            timeline.value = time;
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            const totalMinutes = Math.floor(duration / 60);
+            const totalSeconds = Math.floor(duration % 60);
+
+            const currentTimeStr = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+            const totalTimeStr = String(totalMinutes).padStart(2, '0') + ':' + String(totalSeconds).padStart(2, '0');
+            timecode.textContent = `${currentTimeStr} / ${totalTimeStr}`;
+        }
+
+        function animate(currentTime) {
+            if (!startTime) startTime = currentTime;
+            const dt = (currentTime - startTime) / 1000;
+            startTime = currentTime;
+
+            let time = parseFloat(timeline.value);
+            if (!paused) {
+                time += dt;
+                if (time > duration) {
+                    time = 0;
+                    paused = true;
+                    playPauseBtn.textContent = 'Play';
+                }
+                timeline.value = time;
+            }
+
+            renderScene(time);
+            updateTimeline(time);
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function togglePlayPause() {
+            paused = !paused;
+            playPauseBtn.textContent = paused ? 'Play' : 'Pause';
+            if (!paused) {
+                startTime = null; // Reset start time to avoid jump
+                animate(performance.now());
+            } else {
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function seekTimeline() {
+            cancelAnimationFrame(animationFrameId);
+            renderScene(parseFloat(timeline.value));
+            updateTimeline(parseFloat(timeline.value));
+            if (!paused) {
+                animate(performance.now());
+            }
+        }
+
+        function updateDuration() {
+            duration = parseInt(durationSlider.value);
+            timeline.max = duration;
+            updateTimeline(parseFloat(timeline.value));
+        }
+
+
+        function startRecording() {
+            recording = true;
+            recordedChunks = [];
+            exportBtn.textContent = 'Stop Export';
+
+            const stream = canvas.captureStream(24); // 24 fps
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'gibberellins_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                recording = false;
+                exportBtn.textContent = 'Export Video';
+            };
+
+            mediaRecorder.start();
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+        }
+
+        function exportVideo() {
+            if (!recording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        timeline.addEventListener('input', seekTimeline);
+        durationSlider.addEventListener('input', updateDuration);
+        exportBtn.addEventListener('click', exportVideo);
+
+        // Initial setup
+        timeline.max = duration;
+        updateTimeline(0);
+        animate(0);
+    </script>
+</body>
+</html>

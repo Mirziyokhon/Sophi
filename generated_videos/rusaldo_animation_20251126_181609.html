@@ -1,0 +1,410 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Germination Explained</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+            background-color: #fffcf5;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 880px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+            text-shadow: 1px 1px 2px #fff;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+            display: inline-block;
+            margin: 0 10px;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #4CAF50;
+            width: 0;
+        }
+
+        #timecode {
+            display: inline-block;
+            width: 80px;
+            text-align: center;
+        }
+
+        input[type=range] {
+          width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <div id="timeline">
+                <div id="timeline-progress"></div>
+            </div>
+            <span id="timecode">00:00 / 01:00</span>
+            <label for="duration">Duration (s):</label>
+            <input type="range" id="duration" min="30" max="180" value="60">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subtitles = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timelineProgress = document.getElementById('timeline-progress');
+        const timecode = document.getElementById('timecode');
+        const durationSlider = document.getElementById('duration');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let running = false;
+        let startTime;
+        let currentTime = 0;
+        let duration = 60;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine a team's potential, locked away like a seed waiting for its moment. That seed is about to germinate; it's a process where a dormant plant embryo awakens." },
+            { time: 5, text: "Germination depends on hitting the right strategy: the perfect combination of temperature, water, and oxygen." },
+            { time: 10, text: "Water's the starting quarterback, initiating the process by soaking into the seed and cracking its hard shell." },
+            { time: 15, text: "This triggers enzymes, tiny coaches breaking down stored food reserves, like a pre-game meal fueling the embryo." },
+            { time: 20, text: "The seedling then emerges, drawing on these reserves for energy until it can perform photosynthesis." },
+            { time: 25, text: "Different seeds have unique activation requirements, just like player roles; each needs tailored support to unlock their full potential." },
+            { time: 30, text: "Germination is like a plant's first breath; give a seed the right conditions, and it will burst to life!" },
+            { time: 35, text: "So go out there, cultivate the perfect environment, and watch your own potential sprout into something extraordinary!" },
+            { time: 40, text: "" },
+            { time: 45, text: "" },
+            { time: 50, text: "" },
+            { time: 55, text: "" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            const displacement = 5;
+            const segments = 10;
+            let currentX = x1;
+            let currentY = y1;
+
+            for (let i = 0; i < segments; i++) {
+                const nextX = x1 + (x2 - x1) * (i + 1) / segments + (Math.random() - 0.5) * displacement;
+                const nextY = y1 + (y2 - y1) * (i + 1) / segments + (Math.random() - 0.5) * displacement;
+
+                ctx.lineTo(nextX, nextY);
+                currentX = nextX;
+                currentY = nextY;
+            }
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.lineWidth = 3 * scale;
+            ctx.strokeStyle = color;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 70 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 50 * scale, x, y + 50 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+              roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+              roughLine(x, y, x - 30 * scale, y - 20 * scale, color);
+            } else if (pose === 'thinking'){
+              roughLine(x, y, x + 25 * scale, y - 25 * scale, color);
+              roughLine(x, y, x - 25 * scale, y - 25 * scale, color);
+            } else {
+              roughLine(x, y, x + 30 * scale, y, color);
+              roughLine(x, y, x - 30 * scale, y, color);
+            }
+
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 50 * scale, x + 30 * scale, y + 80 * scale, color);
+                roughLine(x, y + 50 * scale, x - 30 * scale, y + 60 * scale, color);
+            }
+            else {
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+            }
+        }
+
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fffcf5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                // Scene 1
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.ellipse(960, 540, 50, 30, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#D2B48C';
+                ctx.fillRect(0, 600, 1920, 480);
+            } else if (time >= 5 && time < 10) {
+                // Scene 2
+                ctx.fillStyle = '#A0522D';
+                for (let i = 0; i < 50; i++) {
+                  const x = Math.random() * canvas.width;
+                  const y = Math.random() * 480 + 600;
+                  ctx.beginPath();
+                  ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                  ctx.fill();
+                }
+                ctx.fillStyle = '#ADD8E6';
+                for (let i = 0; i < 30; i++) {
+                  const x = Math.random() * canvas.width;
+                  const y = Math.random() * canvas.height;
+                  ctx.beginPath();
+                  ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                  ctx.fill();
+                }
+
+            } else if (time >= 10 && time < 15) {
+                // Scene 3
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.ellipse(960, 540, 50, 30, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#00FFFF';
+                for (let i = 0; i < 100; i++) {
+                  const x = 960 + Math.random() * 100 - 50;
+                  const y = 540 + Math.random() * 100 - 50;
+                  ctx.beginPath();
+                  ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                  ctx.fill();
+                }
+            } else if (time >= 15 && time < 20) {
+                // Scene 4
+                ctx.fillStyle = '#FFFF00';
+                for (let i = 0; i < 50; i++) {
+                  const x = Math.random() * canvas.width;
+                  const y = Math.random() * canvas.height;
+                  ctx.beginPath();
+                  ctx.rect(x, y, 8, 8);
+                  ctx.fill();
+                }
+            } else if (time >= 20 && time < 25) {
+                // Scene 5
+                ctx.fillStyle = '#008000';
+                ctx.fillRect(930, 540, 60, 100);
+                ctx.fillStyle = '#228B22';
+                ctx.beginPath();
+                ctx.moveTo(960, 540);
+                ctx.lineTo(900, 400);
+                ctx.lineTo(1020, 400);
+                ctx.closePath();
+                ctx.fill();
+
+            } else if (time >= 25 && time < 30) {
+              // Scene 6
+              drawStickFigure(300, 600, 'idle', 1.5, 'blue');
+              drawStickFigure(960, 600, 'thinking', 1.5, 'red');
+              drawStickFigure(1600, 600, 'running', 1.5, 'green');
+            } else if (time >= 30 && time < 35) {
+                // Scene 7
+                ctx.fillStyle = '#008000';
+                ctx.fillRect(800, 440, 320, 200);
+                ctx.fillStyle = '#228B22';
+                ctx.beginPath();
+                ctx.moveTo(960, 440);
+                ctx.lineTo(700, 100);
+                ctx.lineTo(1220, 100);
+                ctx.closePath();
+                ctx.fill();
+            }
+            else if (time >= 35 && time < 40) {
+              // Scene 8
+              drawStickFigure(960, 700, 'idle', 2, 'purple');
+              ctx.fillStyle = "yellow";
+              ctx.font = "48px Patrick Hand";
+              ctx.fillText("Bloom!", 850, 200);
+              for (let i = 0; i < 50; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const size = Math.random() * 10 + 5;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, 2 * Math.PI);
+                ctx.fillStyle = `rgba(255, 255, 0, ${Math.random()})`;
+                ctx.fill();
+              }
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    subtitles.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitles.textContent = '';
+        }
+
+        function updateTimeline() {
+            const progress = (currentTime / duration) * 100;
+            timelineProgress.style.width = `${progress}%`;
+            const minutes = Math.floor(currentTime / 60).toString().padStart(2, '0');
+            const seconds = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            const totalMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+            const totalSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+            timecode.textContent = `${minutes}:${seconds} / ${totalMinutes}:${totalSeconds}`;
+        }
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = duration;
+                pauseAnimation();
+            }
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline();
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function playAnimation() {
+            if (!running) {
+                running = true;
+                startTime = performance.now();
+                animationFrameId = requestAnimationFrame(animate);
+                playPauseBtn.textContent = 'Pause';
+            }
+        }
+
+        function pauseAnimation() {
+            if (running) {
+                running = false;
+                cancelAnimationFrame(animationFrameId);
+                playPauseBtn.textContent = 'Play';
+            }
+        }
+
+        playPauseBtn.addEventListener('click', () => {
+            if (running) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        });
+
+        timeline.addEventListener('click', (e) => {
+            const rect = timeline.getBoundingClientRect();
+            const clickPosition = e.clientX - rect.left;
+            const newTime = (clickPosition / rect.width) * duration;
+            currentTime = newTime;
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline();
+        });
+
+        durationSlider.addEventListener('input', () => {
+            duration = parseInt(durationSlider.value);
+            currentTime = 0;
+            updateTimeline();
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+            } else {
+                startRecording();
+            }
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'germination.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = "Export Video";
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = "Stop Export";
+        }
+
+        updateTimeline();
+    </script>
+</body>
+</html>

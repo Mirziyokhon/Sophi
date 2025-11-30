@@ -1,0 +1,419 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cellular Respiration: The Cooking Analogy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Patrick Hand', cursive;
+            background-color: #fffcf5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        #subtitle-card {
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            padding: 10px 20px;
+            margin-top: 10px;
+            text-align: center;
+            max-width: 80%;
+        }
+        #controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 1920px;
+            max-width: 100%;
+            padding: 10px;
+            background-color: #eee;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        #timeline {
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+        #duration-slider {
+            width: 200px;
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitle-card">
+            <p id="subtitle-text"></p>
+        </div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <input type="range" id="timeline" value="0" step="0.01">
+            <span id="timecode">00:00 / 00:00</span>
+            <button id="exportBtn">Export Video</button>
+            <label for="duration-slider">Duration (s):</label>
+            <input type="range" id="duration-slider" min="30" max="180" value="30">
+            <span id="duration-value">30</span>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitleText = document.getElementById('subtitle-text');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timecode = document.getElementById('timecode');
+        const exportBtn = document.getElementById('exportBtn');
+        const durationSlider = document.getElementById('duration-slider');
+        const durationValue = document.getElementById('duration-value');
+
+        let animationFrameId;
+        let isPlaying = false;
+        let startTime;
+        let currentTime = 0;
+        let totalDuration = 30;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        durationSlider.addEventListener('input', () => {
+            totalDuration = parseInt(durationSlider.value);
+            durationValue.textContent = totalDuration;
+            timeline.max = totalDuration;
+            resetAnimation();
+        });
+
+        const narration = [
+            { time: 0, text: "Imagine your favorite dish – the vibrant colors, enticing aromas, and explosive flavors." },
+            { time: 3, text: "Where does all that delicious energy come from?" },
+            { time: 5, text: "It all starts with the sun, fueling plants to create sugars, fats, and even proteins, the building blocks of life." },
+            { time: 8, text: "Now, picture those ingredients being broken down *inside* your cells, like a perfectly controlled culinary reaction." },
+            { time: 12, text: "This is cellular respiration, the process that converts these nutrients into usable energy called ATP." },
+            { time: 15, text: "Oxygen acts as the secret ingredient, the key that unlocks the power stored in the food molecules." },
+            { time: 19, text: "This ATP then fuels every single activity in your body, from a simple blink to a complex dance." },
+            { time: 23, text: "Cellular respiration is like a tiny power plant inside your cells, fueling everything you do!" },
+            { time: 27, text: "So next time you’re cooking up a storm, remember the incredible power source within you, energizing your culinary creations!" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms (thinking pose)
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body (tilted forward)
+                    roughLine(x, y - 30 * scale, x + 10 * scale, y + 50 * scale, color);
+
+                    // Arms (running pose)
+                    roughLine(x + 10 * scale, y, x - 20 * scale, y -10 * scale, color); // back arm
+                    roughLine(x + 10 * scale, y, x + 40 * scale, y + 30 * scale, color); // front arm
+
+                    // Legs (running pose)
+                    roughLine(x + 10 * scale, y + 50 * scale, x - 10 * scale, y + 80 * scale, color);  //back leg
+                     roughLine(x + 10 * scale, y + 50 * scale, x + 30 * scale, y + 110 * scale, color); //front leg
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.fillStyle = '#fffcf5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let currentSubtitle = "";
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time) {
+                    currentSubtitle = narration[i].text;
+                }
+            }
+            subtitleText.textContent = currentSubtitle;
+
+            if (time >= 0 && time < 3) {
+                // Scene 1
+                ctx.fillStyle = 'orange';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("Delicious Beginnings", canvas.width / 2, canvas.height / 2);
+
+                 drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'black');
+
+            } else if (time >= 3 && time < 5) {
+                 // Scene 2
+                ctx.fillStyle = 'lightgreen';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.fillText("Energy Source?", canvas.width / 2, canvas.height / 2);
+                 drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'thinking', 2, 'blue');
+
+            } else if (time >= 5 && time < 8) {
+                //Scene 3
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.fillText("Sun's Power", canvas.width / 2, canvas.height / 2);
+                drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'green');
+
+            }
+            else if (time >= 8 && time < 12) {
+                //Scene 4
+                ctx.fillStyle = 'lightblue';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.fillText("Cellular Breakdown", canvas.width / 2, canvas.height / 2);
+                drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'red');
+
+            }
+            else if (time >= 12 && time < 15) {
+                 //Scene 5
+                ctx.fillStyle = 'orange';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("ATP Production", canvas.width / 2, canvas.height / 2);
+
+                  drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'black');
+
+            }
+             else if (time >= 15 && time < 19) {
+                 //Scene 6
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("Oxygen's Role", canvas.width / 2, canvas.height / 2);
+                   drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'white');
+
+            } else if (time >= 19 && time < 23) {
+                 //Scene 7
+                ctx.fillStyle = 'purple';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("Fueling Life", canvas.width / 2, canvas.height / 2);
+                   drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'running', 2, 'yellow');
+
+            } else if (time >= 23 && time < 27) {
+                // Scene 8
+                ctx.fillStyle = 'red';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("Cellular Powerplant", canvas.width / 2, canvas.height / 2);
+                   drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'white');
+            }
+            else if (time >= 27 && time <= totalDuration) {
+                ctx.fillStyle = 'green';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.font = '80px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("Cooking with Energy", canvas.width / 2, canvas.height / 2);
+                   drawStickFigure(canvas.width / 2, canvas.height / 2 + 200, 'idle', 2, 'black');
+            }
+             else {
+                ctx.fillStyle = '#fffcf5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function updateTimeline() {
+            timeline.value = currentTime;
+            const minutes = Math.floor(currentTime / 60);
+            const seconds = Math.floor(currentTime % 60);
+            const totalMinutes = Math.floor(totalDuration / 60);
+            const totalSeconds = Math.floor(totalDuration % 60);
+
+            const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            const formattedTotalTime = `${String(totalMinutes).padStart(2, '0')}:${String(totalSeconds).padStart(2, '0')}`;
+            timecode.textContent = `${formattedTime} / ${formattedTotalTime}`;
+        }
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const progress = timestamp - startTime;
+            const deltaTime = progress / 1000; // Convert to seconds
+
+            currentTime += deltaTime;
+            if (currentTime > totalDuration) {
+                currentTime = totalDuration;
+                pauseAnimation();
+            }
+
+            renderScene(currentTime);
+            updateTimeline();
+
+            startTime = timestamp;
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function playAnimation() {
+            if (!isPlaying) {
+                isPlaying = true;
+                playPauseBtn.textContent = 'Pause';
+                startTime = null; // Reset start time for smooth looping
+                animate();
+            }
+        }
+
+        function pauseAnimation() {
+            if (isPlaying) {
+                isPlaying = false;
+                playPauseBtn.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function togglePlayPause() {
+            if (isPlaying) {
+                pauseAnimation();
+            } else {
+                playAnimation();
+            }
+        }
+
+        function seekTimeline() {
+            currentTime = parseFloat(timeline.value);
+            renderScene(currentTime);
+            updateTimeline();
+        }
+
+        function resetAnimation() {
+            pauseAnimation();
+            currentTime = 0;
+            timeline.value = 0;
+            updateTimeline();
+            renderScene(0);
+        }
+
+
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        timeline.addEventListener('input', seekTimeline);
+
+        // Export Video
+        async function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24); // 24 FPS
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cellular_respiration.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = 'Export Video';
+                playPauseBtn.disabled = false; // Re-enable play button
+                durationSlider.disabled = false; // Re-enable duration slider
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = 'Stop Export';
+            playPauseBtn.disabled = true; // Disable play button during export
+            durationSlider.disabled = true; // Disable duration slider during export
+            playAnimation(); // Ensure animation is playing during recording
+        }
+
+
+        function stopRecording() {
+            pauseAnimation();
+            mediaRecorder.stop();
+        }
+
+
+        exportBtn.addEventListener('click', () => {
+            if (exportBtn.textContent === 'Export Video') {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        resetAnimation();
+    </script>
+</body>
+</html>

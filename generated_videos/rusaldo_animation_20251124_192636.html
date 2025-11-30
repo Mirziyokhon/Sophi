@@ -1,0 +1,381 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cellular Respiration: The Music of Life</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #canvasContainer {
+            position: relative;
+        }
+
+        #myCanvas {
+            border: 1px solid #ddd;
+        }
+
+        #subtitleCard {
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            padding: 10px;
+            margin-top: 10px;
+            text-align: center;
+            max-width: 800px;
+        }
+
+        #controlBar {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+            width: 800px;
+        }
+
+        #timeline {
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+
+        #durationSlider {
+            width: 200px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvasContainer">
+        <canvas id="myCanvas" width="1920" height="1080"></canvas>
+    </div>
+    <div id="subtitleCard">
+        <p id="subtitleText"></p>
+    </div>
+    <div id="controlBar">
+        <button id="playPauseButton">Play</button>
+        <input type="range" id="timeline" min="0" max="100" value="0">
+        <span id="timecode">00:00 / 00:30</span>
+        <button id="exportButton">Export Video</button>
+    </div>
+    <input type="range" id="durationSlider" min="30" max="180" value="30">
+    <label for="durationSlider">Duration (seconds)</label>
+
+    <script>
+        const canvas = document.getElementById('myCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitleText = document.getElementById('subtitleText');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timeline = document.getElementById('timeline');
+        const timecode = document.getElementById('timecode');
+        const exportButton = document.getElementById('exportButton');
+        const durationSlider = document.getElementById('durationSlider');
+
+        let animationDuration = 30;
+        let animationCurrentTime = 0;
+        let isPlaying = true;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine a lush rainforest, a symphony of life powered by sunlight. Every rustling leaf, every vibrant flower, is fueled by a process called cellular respiration." },
+            { time: 5, text: "Inside each plant cell, microscopic power plants are working tirelessly, converting the sun's energy into a form life can use." },
+            { time: 10, text: "They're taking in nutrients, like sugars created through photosynthesis, and using oxygen to unlock the energy within." },
+            { time: 15, text: "This energy is stored as ATP, the cell's energy currency, like musical notes ready to create a masterpiece." },
+            { time: 20, text: "This process can happen with or without oxygen, adapting to different environments. Cellular respiration isn't just in plants, it's the engine powering every living thing, from the smallest bacteria to the largest whale." },
+            { time: 25, text: "So next time you hear your favorite song, remember, cellular respiration is the underlying rhythm of life itself, powering every beat!" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 10 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 10 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 80 * scale, color);
+
+                    // Thinking bubble
+                    ctx.beginPath();
+                    ctx.arc(x + 40 * scale, y - 80 * scale, 15 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    break;
+                case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+                    roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 30 * scale, y + 70 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 30 * scale, y + 90 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fffcf5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let currentSubtitle = "";
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && time < narration[i].time + 5) {
+                    currentSubtitle = narration[i].text;
+                    break;
+                }
+            }
+            subtitleText.textContent = currentSubtitle;
+
+            if (time >= 0 && time < 5) {
+                // Rainforest scene
+                ctx.fillStyle = 'green';
+                ctx.fillRect(0, canvas.height * 0.7, canvas.width, canvas.height * 0.3);
+                ctx.fillStyle = 'darkgreen';
+                ctx.fillRect(0, canvas.height * 0.8, canvas.width, canvas.height * 0.2);
+
+                for (let i = 0; i < 20; i++) {
+                    let x = Math.random() * canvas.width;
+                    let y = canvas.height * 0.6 + Math.random() * canvas.height * 0.4;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(x, y, 2, 5);
+                }
+            } else if (time >= 5 && time < 10) {
+                // Cell with chloroplasts
+                ctx.fillStyle = 'lightgreen';
+                ctx.beginPath();
+                ctx.ellipse(canvas.width / 2, canvas.height / 2, 200, 150, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.stroke();
+
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillStyle = 'darkgreen';
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2 - 80 + i * 40, canvas.height / 2, 20, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 0.7, 'blue');
+
+            } else if (time >= 10 && time < 15) {
+                // Sugar and Oxygen entering
+                ctx.fillStyle = 'lightgreen';
+                ctx.beginPath();
+                ctx.ellipse(canvas.width / 2, canvas.height / 2, 200, 150, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.stroke();
+
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(canvas.width * 0.2, canvas.height / 2, 15, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillText("O2", canvas.width * 0.2 + 20, canvas.height / 2 + 5);
+
+                ctx.fillStyle = 'yellow';
+                ctx.fillRect(canvas.width * 0.8, canvas.height / 2 - 15, 30, 30);
+                ctx.fillText("Sugar", canvas.width * 0.8 - 50, canvas.height / 2 + 5);
+
+            } else if (time >= 15 && time < 20) {
+                 // ATP turning into musical notes
+                ctx.fillStyle = 'purple';
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2, canvas.height / 2, 50, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillText("ATP", canvas.width/2 - 15, canvas.height/2 + 5)
+
+                for(let i = 0; i < 5; i++) {
+                    ctx.fillStyle = 'black';
+                    ctx.fillText("♪", canvas.width / 2 - 100 + i * 50, canvas.height / 2 - 70 + i * 10);
+                }
+            } else if (time >= 20 && time < 25) {
+                // Aerobic vs Anaerobic
+                ctx.fillStyle = 'lightblue';
+                ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+                ctx.fillText("Aerobic (Oxygen)", canvas.width / 4 - 40, 50);
+
+                ctx.fillStyle = 'lightcoral';
+                ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+                ctx.fillText("Anaerobic (No Oxygen)", canvas.width * 3 / 4 - 60, 50);
+                drawStickFigure(canvas.width * 0.75, canvas.height * 0.8, 'running', 0.7, 'black');
+
+            } else if (time >= 25 && time < 30) {
+                // Final Scene: Rainforest with Music
+                ctx.fillStyle = 'green';
+                ctx.fillRect(0, canvas.height * 0.7, canvas.width, canvas.height * 0.3);
+                ctx.fillStyle = 'darkgreen';
+                ctx.fillRect(0, canvas.height * 0.8, canvas.width, canvas.height * 0.2);
+
+                for (let i = 0; i < 20; i++) {
+                    let x = Math.random() * canvas.width;
+                    let y = canvas.height * 0.6 + Math.random() * canvas.height * 0.4;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(x, y, 2, 5);
+                }
+                ctx.fillStyle = 'black';
+                ctx.font = '48px Patrick Hand';
+                ctx.textAlign = 'center';
+                ctx.fillText("♪ Cellular Respiration: The Rhythm of Life ♪", canvas.width / 2, canvas.height / 4);
+                ctx.textAlign = 'left';
+
+                drawStickFigure(canvas.width * 0.8, canvas.height * 0.8, 'idle', 0.7, 'black');
+            }
+
+        }
+
+        let dt = 0;
+        let lastTime = 0;
+
+        function animationLoop(currentTime) {
+            requestAnimationFrame(animationLoop);
+            const delta = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            dt += delta;
+            if (dt > 1 / 24) { // 24 FPS
+                if (isPlaying) {
+                    animationCurrentTime += dt;
+                    if (animationCurrentTime > animationDuration) {
+                        animationCurrentTime = 0;
+                    }
+
+                    renderScene(animationCurrentTime);
+                    timeline.value = (animationCurrentTime / animationDuration) * 100;
+
+                    const minutes = Math.floor(animationCurrentTime / 60);
+                    const seconds = Math.floor(animationCurrentTime % 60);
+                    const totalMinutes = Math.floor(animationDuration / 60);
+                    const totalSeconds = Math.floor(animationDuration % 60);
+
+                    timecode.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} / ${String(totalMinutes).padStart(2, '0')}:${String(totalSeconds).padStart(2, '0')}`;
+                }
+                dt = 0;
+            }
+        }
+
+        playPauseButton.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playPauseButton.textContent = isPlaying ? 'Pause' : 'Play';
+        });
+
+        timeline.addEventListener('input', () => {
+            animationCurrentTime = (timeline.value / 100) * animationDuration;
+            renderScene(animationCurrentTime);
+
+            const minutes = Math.floor(animationCurrentTime / 60);
+            const seconds = Math.floor(animationCurrentTime % 60);
+            const totalMinutes = Math.floor(animationDuration / 60);
+            const totalSeconds = Math.floor(animationDuration % 60);
+
+            timecode.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} / ${String(totalMinutes).padStart(2, '0')}:${String(totalSeconds).padStart(2, '0')}`;
+        });
+
+        durationSlider.addEventListener('input', () => {
+            animationDuration = parseInt(durationSlider.value);
+            animationCurrentTime = 0;
+            timeline.value = 0;
+            renderScene(animationCurrentTime);
+
+            const minutes = Math.floor(animationCurrentTime / 60);
+            const seconds = Math.floor(animationCurrentTime % 60);
+            const totalMinutes = Math.floor(animationDuration / 60);
+            const totalSeconds = Math.floor(animationDuration % 60);
+
+            timecode.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} / ${String(totalMinutes).padStart(2, '0')}:${String(totalSeconds).padStart(2, '0')}`;
+
+        });
+
+        exportButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                exportButton.textContent = "Export Video";
+            } else {
+                startRecording();
+                exportButton.textContent = "Stop Export";
+            }
+        });
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cellular_respiration_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+        }
+
+        animationLoop(0);
+    </script>
+</body>
+</html>

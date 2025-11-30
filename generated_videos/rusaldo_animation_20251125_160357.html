@@ -1,0 +1,467 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Glucose: The Sweet Fuel of Life</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 850px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333;
+            font-size: 32px;
+            text-align: center;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #playPauseButton, #exportButton {
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+
+        #timecode {
+            font-size: 20px;
+            margin: 0 10px;
+        }
+
+        #timeline {
+            width: 500px;
+            height: 10px;
+            background-color: #ccc;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #3498db;
+            width: 0;
+        }
+
+        #durationSlider {
+            width: 150px;
+            margin: 0 10px;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseButton">Play</button>
+            <span id="timecode">00:00 / 00:00</span>
+            <div id="timeline">
+                <div id="timeline-progress"></div>
+            </div>
+            <input type="range" id="durationSlider" min="30" max="180" value="30">
+            <button id="exportButton">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const timecodeDisplay = document.getElementById('timecode');
+        const timeline = document.getElementById('timeline');
+        const timelineProgress = document.getElementById('timeline-progress');
+        const durationSlider = document.getElementById('durationSlider');
+        const exportButton = document.getElementById('exportButton');
+
+        let animationFrameId;
+        let startTime;
+        let paused = false;
+        let duration = parseInt(durationSlider.value);
+        let stream;
+        let recorder;
+
+        const narration = [
+            { time: 0, text: "Imagine the most delicious cake you've ever tasted!" },
+            { time: 4, text: "That sweetness? Often thanks to glucose, the simple sugar fueling all life." },
+            { time: 8, text: "Plants are the master chefs, using sunlight and water to whip up glucose through photosynthesis." },
+            { time: 12, text: "Inside their cells, this sugar becomes energy currency: ATP, powering everything they do." },
+            { time: 16, text: "Plants then store it as starch, like potatoes, and animals store it as glycogen for later use." },
+            { time: 20, text: "Glucose: the sweet fuel powering life from plants to people!" },
+            { time: 24, text: "So, next time you’re cooking, remember the fundamental energy source powering every bite." }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose, scale, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 5;
+
+            switch (pose) {
+                case 'idle':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 70 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 50 * scale, x, y + 50 * scale, color);
+
+                    // Arms
+                    roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                    roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+                case 'thinking':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 70 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 50 * scale, x, y + 50 * scale, color);
+
+                    // Arms (thinking pose)
+                    roughLine(x, y - 20 * scale, x - 30 * scale, y - 40 * scale, color);
+                    roughLine(x - 30 * scale, y - 40 * scale, x - 50 * scale, y - 30 * scale, color);
+
+                    roughLine(x, y - 20 * scale, x + 30 * scale, y - 40 * scale, color);
+                    roughLine(x + 30 * scale, y - 40 * scale, x + 50 * scale, y - 30 * scale, color);
+
+                    // Legs
+                    roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                    break;
+               case 'running':
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(x, y - 70 * scale, 20 * scale, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Body
+                    roughLine(x, y - 50 * scale, x, y + 50 * scale, color);
+
+                    // Arms (running pose)
+                    roughLine(x, y - 20 * scale, x - 30 * scale, y - 10 * scale, color);
+                    roughLine(x, y - 20 * scale, x + 30 * scale, y - 30 * scale, color);
+
+                    // Legs (running pose)
+                    roughLine(x, y + 50 * scale, x - 40 * scale, y + 80 * scale, color);
+                    roughLine(x, y + 50 * scale, x + 40 * scale, y + 60 * scale, color);
+                    break;
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 4) {
+                // Scene 1: Cake
+                ctx.fillStyle = '#fdd7e4';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#e4717a';
+                ctx.fillText("Delicious Cake!", 800, 100);
+
+                // Draw cake layers
+                ctx.fillStyle = '#f8bbd0'; // Light pink
+                ctx.fillRect(500, 400, 920, 150); // Bottom layer
+
+                ctx.fillStyle = '#f48fb1'; // Medium pink
+                ctx.fillRect(550, 250, 820, 150); // Middle layer
+
+                ctx.fillStyle = '#f06292'; // Dark pink
+                ctx.fillRect(600, 100, 720, 150); // Top layer
+                drawStickFigure(300, 500, 'idle', 2, 'black');
+            } else if (time >= 4 && time < 8) {
+                // Scene 2: Glucose Molecule
+                ctx.fillStyle = '#a7ffeb';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#4db6ac';
+                ctx.fillText("Glucose: The Simple Sugar", 600, 100);
+                 const angle = time * 0.5; // Rotation speed
+
+                // Carbon atoms
+                ctx.fillStyle = 'black';
+                const carbonCoords = [
+                    {x: 700, y: 400}, {x: 850, y: 300}, {x: 1000, y: 400},
+                    {x: 1000, y: 550}, {x: 850, y: 650}, {x: 700, y: 550}
+                ];
+
+                carbonCoords.forEach(coord => {
+                    const rotatedX = coord.x + 100 * Math.cos(angle);
+                    const rotatedY = coord.y + 100 * Math.sin(angle);
+                    ctx.beginPath();
+                    ctx.arc(rotatedX, rotatedY, 20, 0, 2 * Math.PI);
+                    ctx.fill();
+                });
+                 drawStickFigure(300, 500, 'idle', 2, 'black');
+            } else if (time >= 8 && time < 12) {
+                // Scene 3: Photosynthesis
+                ctx.fillStyle = '#c5e1a5';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#7cb342';
+                ctx.fillText("Photosynthesis: Plants Cooking", 550, 100);
+
+                // Sun
+                ctx.fillStyle = '#ffeb3b';
+                ctx.beginPath();
+                ctx.arc(200, 200, 80, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Leaves
+                ctx.fillStyle = '#689f38';
+                for (let i = 0; i < 5; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(500 + i * 200, 500, 50, 80, Math.PI / 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                drawStickFigure(1500, 500, 'thinking', 2, 'black');
+
+            } else if (time >= 12 && time < 16) {
+                // Scene 4: ATP
+                ctx.fillStyle = '#fff59d';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#f9a825';
+                ctx.fillText("ATP: Energy Currency", 700, 100);
+
+                // ATP Structure (simplified)
+                ctx.fillStyle = '#fbc02d';
+                ctx.fillRect(700, 400, 100, 100); // Adenosine
+                ctx.fillRect(800, 400, 100, 100); // Tri
+                ctx.fillRect(900, 400, 100, 100); // Phosphate
+
+                ctx.fillStyle = 'black';
+                ctx.font = '30px Patrick Hand';
+                ctx.fillText("A", 735, 460);
+                ctx.fillText("T", 835, 460);
+                ctx.fillText("P", 935, 460);
+                 drawStickFigure(300, 500, 'idle', 2, 'black');
+            } else if (time >= 16 && time < 20) {
+                // Scene 5: Starch and Glycogen
+                ctx.fillStyle = '#ffe0b2';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#e65100';
+                ctx.fillText("Starch & Glycogen: Storage", 580, 100);
+
+                // Potatoes
+                ctx.fillStyle = '#d84315';
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(300 + i * 150, 500, 50, 40, 0, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                // Glycogen
+                ctx.fillStyle = '#bf360c';
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(1200 + i * 100, 500, 30, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                 drawStickFigure(1600, 500, 'idle', 2, 'black');
+            } else if (time >= 20 && time < 24) {
+                // Scene 6: Glucose Powering Life
+                ctx.fillStyle = '#b2ebf2';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#00acc1';
+                ctx.fillText("Fueling Life!", 750, 100);
+
+                // Runner
+                drawStickFigure(400, 700, 'running', 2, 'black');
+
+                // Wheat
+                ctx.fillStyle = '#fdd835';
+                for (let i = 0; i < 4; i++) {
+                    ctx.fillRect(1200 + i * 100, 600, 20, 100);
+                }
+                drawStickFigure(1500, 700, 'idle', 2, 'black');
+            } else if (time >= 24 && time < 30) {
+                // Scene 7: Cooking
+                ctx.fillStyle = '#e0f2f1';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = 'bold 60px Patrick Hand';
+                ctx.fillStyle = '#00796b';
+                ctx.fillText("Cooking and Glucose", 650, 100);
+
+                // Vegetables
+                ctx.fillStyle = '#4caf50';
+                ctx.beginPath();
+                ctx.arc(300, 600, 40, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = '#ff5722';
+                ctx.fillRect(500, 550, 40, 80);
+                drawStickFigure(1600, 700, 'idle', 2, 'black');
+            }
+        }
+
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    subtitlesDiv.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitlesDiv.textContent = '';
+        }
+
+        function updateTimecode(time) {
+            const currentTime = formatTime(time);
+            const totalTime = formatTime(duration);
+            timecodeDisplay.textContent = `${currentTime} / ${totalTime}`;
+        }
+
+        function formatTime(time) {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function updateTimeline(time) {
+            const progress = (time / duration) * 100;
+            timelineProgress.style.width = `${progress}%`;
+        }
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const timeElapsed = (timestamp - startTime) / 1000; // in seconds
+
+            const currentTime = timeElapsed % duration;
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimecode(currentTime);
+            updateTimeline(currentTime);
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function playPause() {
+            if (paused) {
+                paused = false;
+                playPauseButton.textContent = 'Pause';
+                startTime = performance.now() - (parseFloat(timelineProgress.style.width) / 100) * duration * 1000;
+                animationLoop(startTime);
+
+            } else {
+                paused = true;
+                playPauseButton.textContent = 'Play';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function seek(event) {
+            const rect = timeline.getBoundingClientRect();
+            const clickPosition = event.clientX - rect.left;
+            const seekTime = (clickPosition / rect.width) * duration;
+
+            startTime = performance.now() - seekTime * 1000;
+            if (!paused) {
+                cancelAnimationFrame(animationFrameId);
+                animationLoop(startTime);
+            } else{
+                renderScene(seekTime);
+                updateSubtitles(seekTime);
+                updateTimecode(seekTime);
+                updateTimeline(seekTime);
+            }
+        }
+
+        function updateDuration() {
+            duration = parseInt(durationSlider.value);
+            if (paused){
+                const seekTime = (parseFloat(timelineProgress.style.width) / 100) * duration;
+                renderScene(seekTime);
+                updateSubtitles(seekTime);
+                updateTimecode(seekTime);
+                updateTimeline(seekTime);
+            }
+        }
+        async function exportVideo() {
+            if (recorder && recorder.state === "recording") {
+                recorder.stop();
+                exportButton.textContent = "Export Video";
+                return;
+            }
+
+            exportButton.textContent = "Stop Export";
+
+            stream = canvas.captureStream(24);
+            recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'glucose_animation.webm';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+            recorder.start();
+        }
+
+        playPauseButton.addEventListener('click', playPause);
+        timeline.addEventListener('click', seek);
+        durationSlider.addEventListener('input', updateDuration);
+        exportButton.addEventListener('click', exportVideo);
+
+        // Initial setup
+        ctx.font = '30px Patrick Hand';
+        animationLoop(0);
+    </script>
+</body>
+</html>

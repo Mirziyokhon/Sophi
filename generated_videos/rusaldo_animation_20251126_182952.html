@@ -1,0 +1,421 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Germination: From Seed to Seedling</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+        }
+
+        canvas {
+            background-color: #fffcf5;
+            display: block;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 880px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1800px;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(200, 200, 200, 0.5);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+            display: inline-block;
+            position: relative;
+        }
+
+        #timeline-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background-color: steelblue;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        input[type=range] {
+            width: 150px;
+        }
+
+        #timecode {
+            display: inline-block;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="animationCanvas" width="1920" height="1080"></canvas>
+        <div id="subtitles"></div>
+        <div id="controls">
+            <button id="playPauseBtn">Play</button>
+            <span id="timecode">00:00 / 01:00</span>
+            <div id="timeline">
+                <div id="timeline-progress"></div>
+            </div>
+            <label for="duration">Duration (s):</label>
+            <input type="range" id="duration" min="30" max="180" value="60">
+            <button id="exportBtn">Export Video</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitlesDiv = document.getElementById('subtitles');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const timeline = document.getElementById('timeline');
+        const timelineProgress = document.getElementById('timeline-progress');
+        const timecodeDisplay = document.getElementById('timecode');
+        const durationInput = document.getElementById('duration');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let animationFrameId;
+        let isPlaying = false;
+        let startTime;
+        let currentTime = 0;
+        let duration = 60;
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        const narration = [
+            { time: 0, text: "Imagine your favorite football team is like a tiny seed, packed with potential. But to win, it needs more than just heart; it needs the right conditions to germinate and grow!" },
+            { time: 5, text: "Think of germination as the team's training camp: the moment when dormant potential explodes into action. First, water is like the hydration a player needs, soaking in and activating the seed’s inner power." },
+            { time: 10, text: "Oxygen fuels the engine, jumpstarting respiration as energy surges to prepare for the game." },
+            { time: 15, text: "The perfect temperature sets the stage, warming the field for optimal performance while light or darkness acts as the coach's carefully planned plays, each essential for the team's success." },
+            { time: 20, text: "Watch now as the root, like a strong offensive line, bursts out, anchoring the team. Next, the shoot, like a skilled wide receiver, reaches for the sky, ready to catch the light." },
+            { time: 30, text: "Finally, the cotyledons, like the team's logo, unfurl, signaling the arrival of new life." },
+            { time: 40, text: "Understanding germination is like scouting a new player: it reveals hidden abilities and the potential for greatness." },
+            { time: 50, text: "So, go out there and cultivate your own potential, creating the perfect conditions for your dreams to sprout and flourish!" }
+        ];
+
+        function roughLine(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.moveTo(x1 + Math.random() * 3, y1 + Math.random() * 3);
+            ctx.lineTo(x2 + Math.random() * 3, y2 + Math.random() * 3);
+            ctx.stroke();
+        }
+
+        function drawStickFigure(x, y, pose = 'idle', scale = 1, color = 'black') {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4 * scale;
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(x, y - 60 * scale, 20 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Body
+            roughLine(x, y - 40 * scale, x, y + 40 * scale, color);
+
+            // Arms
+            if (pose === 'running') {
+                roughLine(x, y - 10 * scale, x - 30 * scale, y + 10 * scale, color);
+                roughLine(x, y - 10 * scale, x + 30 * scale, y - 30 * scale, color);
+            } else if (pose === 'thinking') {
+                roughLine(x, y - 10 * scale, x - 20 * scale, y - 10 * scale, color);
+                roughLine(x, y - 10 * scale, x + 20 * scale, y - 10 * scale, color);
+            } else {
+                roughLine(x, y - 10 * scale, x - 20 * scale, y + 20 * scale, color);
+                roughLine(x, y - 10 * scale, x + 20 * scale, y + 20 * scale, color);
+            }
+
+
+            // Legs
+            if (pose === 'running') {
+                roughLine(x, y + 40 * scale, x - 20 * scale, y + 70 * scale, color);
+                roughLine(x, y + 40 * scale, x + 20 * scale, y + 50 * scale, color);
+            } else {
+                roughLine(x, y + 40 * scale, x - 20 * scale, y + 70 * scale, color);
+                roughLine(x, y + 40 * scale, x + 20 * scale, y + 70 * scale, color);
+            }
+        }
+
+        function renderScene(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (time >= 0 && time < 5) {
+                ctx.fillStyle = '#558B2F'; // Dark Green Soil
+                ctx.fillRect(0, 540, canvas.width, 540); // Soil
+                ctx.fillStyle = '#333'; // Seed Color
+                ctx.beginPath();
+                ctx.ellipse(960, 600, 50, 30, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#FFC107';
+                ctx.fillRect(850, 500, 50, 30);
+                ctx.font = '30px Patrick Hand';
+                ctx.fillStyle = 'white';
+                ctx.fillText('Football Helmet', 810, 525);
+            } else if (time >= 5 && time < 10) {
+                ctx.fillStyle = '#558B2F';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.ellipse(960, 600, 50 + (time - 5) * 10, 30 + (time - 5) * 6, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'lightblue';
+                for (let i = 0; i < 20; i++) {
+                    ctx.beginPath();
+                    ctx.arc(900 + Math.random() * 120, 550 + Math.random() * 100, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            } else if (time >= 10 && time < 15) {
+                ctx.fillStyle = '#558B2F';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.ellipse(960, 600, 100, 60, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'orange';
+
+                for (let i = 0; i < 30; i++) {
+                    ctx.beginPath();
+                    ctx.arc(900 + Math.random() * 120, 550 + Math.random() * 100, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            } else if (time >= 15 && time < 20) {
+                ctx.fillStyle = '#558B2F';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.ellipse(960, 600, 100, 60, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'orange';
+                for (let i = 0; i < 30; i++) {
+                    ctx.beginPath();
+                    ctx.arc(900 + Math.random() * 120, 550 + Math.random() * 100, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                ctx.fillStyle = 'red';
+                ctx.fillRect(1500, 100, 50, 200);
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Patrick Hand';
+                ctx.fillText('Temperature', 1450, 90);
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Patrick Hand';
+                ctx.fillText('Plays', 1700, 90);
+                ctx.fillRect(1700, 100, 100, 100);
+            } else if (time >= 20 && time < 30) {
+                ctx.fillStyle = '#558B2F';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                ctx.fillStyle = 'brown';
+                roughLine(960, 600, 960, 800 + (time - 20) * 10, 'brown');
+                ctx.fillStyle = 'green';
+                roughLine(960, 600, 960, 400 - (time - 20) * 10, 'green');
+                drawStickFigure(200, 500, 'running', 2, 'steelblue');
+
+            } else if (time >= 30 && time < 40) {
+                ctx.fillStyle = '#558B2F';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.ellipse(960, 300, 50 + (time - 30) * 5, 30 + (time - 30) * 3, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = 'yellow';
+                for (let i = 0; i < 20; i++) {
+                    ctx.beginPath();
+                    ctx.arc(900 + Math.random() * 120, 250 + Math.random() * 100, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            } else if (time >= 40 && time < 50) {
+                ctx.fillStyle = '#558B2F';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.ellipse(960, 300, 100, 60, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                drawStickFigure(200, 500, 'thinking', 2, 'steelblue');
+
+            } else if (time >= 50 && time < 60) {
+                ctx.fillStyle = 'lightgreen';
+                ctx.fillRect(0, 540, canvas.width, 540);
+                drawStickFigure(1700, 800, 'idle', 2, 'steelblue');
+            }
+        }
+
+        function updateSubtitles(time) {
+            for (let i = 0; i < narration.length; i++) {
+                if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                    subtitlesDiv.textContent = narration[i].text;
+                    return;
+                }
+            }
+            subtitlesDiv.textContent = '';
+        }
+
+        function updateTimeline(time) {
+            const progress = (time / duration) * 100;
+            timelineProgress.style.width = `${progress}%`;
+        }
+
+        function updateTimecode(time) {
+            const currentTimeFormatted = formatTime(time);
+            const durationFormatted = formatTime(duration);
+            timecodeDisplay.textContent = `${currentTimeFormatted} / ${durationFormatted}`;
+        }
+
+        function formatTime(time) {
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function animationLoop(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const dt = (timestamp - startTime) / 1000;
+            startTime = timestamp;
+            currentTime += dt;
+
+            if (currentTime > duration) {
+                currentTime = 0;
+            }
+
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline(currentTime);
+            updateTimecode(currentTime);
+
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+
+        function playPause() {
+            if (isPlaying) {
+                cancelAnimationFrame(animationFrameId);
+                playPauseBtn.textContent = 'Play';
+            } else {
+                startTime = null;
+                animationLoop();
+                playPauseBtn.textContent = 'Pause';
+            }
+            isPlaying = !isPlaying;
+        }
+
+        function seekTimeline(event) {
+            const rect = timeline.getBoundingClientRect();
+            const clickPosition = event.clientX - rect.left;
+            const seekTime = (clickPosition / rect.width) * duration;
+            currentTime = seekTime;
+            renderScene(currentTime);
+            updateSubtitles(currentTime);
+            updateTimeline(currentTime);
+            updateTimecode(currentTime);
+        }
+
+        function handleDurationChange() {
+            duration = parseInt(durationInput.value);
+            currentTime = 0;
+            updateTimeline(currentTime);
+            updateTimecode(currentTime);
+        }
+
+        function startRecording() {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'germination_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                exportBtn.textContent = 'Export Video';
+                isPlaying = false;
+                playPauseBtn.disabled = false;
+                cancelAnimationFrame(animationFrameId);
+                playPauseBtn.textContent = 'Play';
+                startTime = null;
+                currentTime = 0;
+                renderScene(currentTime);
+                updateSubtitles(currentTime);
+                updateTimeline(currentTime);
+                updateTimecode(currentTime);
+                timeline.addEventListener('click', seekTimeline);
+
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = 'Stop Export';
+            playPauseBtn.disabled = true;
+            timeline.removeEventListener('click', seekTimeline);
+        }
+
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        }
+
+        function exportVideo() {
+            if (exportBtn.textContent === 'Export Video') {
+                startRecording();
+                if (isPlaying) {
+                   playPause();
+                }
+             } else {
+                stopRecording();
+            }
+        }
+
+        playPauseBtn.addEventListener('click', playPause);
+        timeline.addEventListener('click', seekTimeline);
+        durationInput.addEventListener('input', handleDurationChange);
+        exportBtn.addEventListener('click', exportVideo);
+
+        updateTimecode(0);
+    </script>
+</body>
+</html>

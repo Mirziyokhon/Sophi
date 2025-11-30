@@ -1,0 +1,497 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Gibberellins: Architects of the Green Revolution</title>
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fffcf5;
+            font-family: 'Patrick Hand', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        #canvas {
+            background-color: #fffcf5;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #subtitles {
+            position: absolute;
+            top: 900px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            font-size: 32px;
+            color: #333;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 252, 245, 0.8);
+            padding: 10px;
+            text-align: center;
+        }
+
+        #timeline {
+            width: 60%;
+            height: 10px;
+            background-color: #ddd;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        #timeline-progress {
+            height: 10px;
+            background-color: #3498db;
+            width: 0;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+
+        input[type=range] {
+            width: 100px;
+        }
+
+    </style>
+</head>
+<body>
+<div id="container">
+    <canvas id="canvas" width="1920" height="1080"></canvas>
+    <div id="subtitles"></div>
+    <div id="controls">
+        <button id="playPauseBtn">Play</button>
+        <input type="range" id="timeline" min="0" max="100" value="0">
+        <span id="timecode">00:00 / 00:30</span>
+        <label for="duration">Duration (seconds):</label>
+        <input type="number" id="duration" min="30" max="180" value="30">
+        <button id="exportBtn">Export Video</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const subtitles = document.getElementById('subtitles');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const timeline = document.getElementById('timeline');
+    const timecode = document.getElementById('timecode');
+    const durationInput = document.getElementById('duration');
+    const exportBtn = document.getElementById('exportBtn');
+
+    let animationFrameId;
+    let isPlaying = false;
+    let startTime;
+    let currentTime = 0;
+    let duration = parseInt(durationInput.value);
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    const narration = [
+        { time: 0, text: "Imagine a world starving. Before the Green Revolution, it was a stark reality." },
+        { time: 3, text: "But hidden within plant cells were tiny architects called Gibberellins, or GAs, naturally occurring diterpenoid acids." },
+        { time: 6, text: "These hormones act as vital keys, unlocking seed germination and directing stem growth." },
+        { time: 9, text: "Various types of GAs exist, each with unique activities, some triggering more growth than others." },
+        { time: 12, text: "By selectively breeding crops with GA deficiencies, like shorter wheat and rice, yields skyrocketed." },
+        { time: 16, text: "This manipulation channeled energy into grain production, not excessive stem length." },
+        { time: 20, text: "The Green Revolution averted famine, revolutionizing agriculture worldwide." },
+        { time: 26, text: "What if we could further unlock nature's secrets? The future of food security lies in understanding these tiny plant hormones." }
+    ];
+
+    function roughLine(x1, y1, x2, y2, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x1 + Math.random() * 3 - 1.5, y1 + Math.random() * 3 - 1.5);
+        ctx.lineTo(x2 + Math.random() * 3 - 1.5, y2 + Math.random() * 3 - 1.5);
+        ctx.stroke();
+    }
+
+    function drawStickFigure(x, y, pose, scale, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 5;
+
+        switch (pose) {
+            case 'idle':
+                // Head
+                ctx.beginPath();
+                ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                ctx.stroke();
+
+                // Body
+                roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                // Arms
+                roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+                roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+                // Legs
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                break;
+            case 'thinking':
+                // Head
+                ctx.beginPath();
+                ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                ctx.stroke();
+
+                // Body
+                roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                // Arms
+                roughLine(x, y, x - 30 * scale, y - 10 * scale, color);
+                roughLine(x, y, x + 30 * scale, y - 10 * scale, color);
+
+                // Legs
+                roughLine(x, y + 50 * scale, x - 20 * scale, y + 100 * scale, color);
+                roughLine(x, y + 50 * scale, x + 20 * scale, y + 100 * scale, color);
+                break;
+            case 'running':
+                 // Head
+                 ctx.beginPath();
+                 ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+                 ctx.stroke();
+
+                // Body
+                roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+                // Arms
+                roughLine(x, y -10*scale, x - 40 * scale, y + 10 * scale, color);
+                roughLine(x, y -10*scale, x + 40 * scale, y + 10 * scale, color);
+
+                // Legs
+                roughLine(x, y + 50 * scale, x - 30 * scale, y + 90 * scale, color);
+                roughLine(x, y + 50 * scale, x + 30 * scale, y + 110 * scale, color);
+                break;
+
+        }
+    }
+
+    function renderScene(time) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (time >= 0 && time < 3) {
+            // Scene 1
+            ctx.fillStyle = '#a87952';
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2); // Dusty ground
+            ctx.fillStyle = '#f7e79b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            drawStickFigure(300, 700, 'idle', 2, '#8b4513');
+            ctx.font = '48px Patrick Hand';
+            ctx.fillStyle = '#8b4513';
+            ctx.fillText('A World Starving', 100, 100);
+        } else if (time >= 3 && time < 6) {
+            // Scene 2
+            ctx.fillStyle = '#228B22'; // Dark Green
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw plant cell outline
+            ctx.strokeStyle = '#006400'; // Darker Green
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.ellipse(canvas.width / 2, canvas.height / 2, 300, 200, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Nucleus
+            ctx.fillStyle = '#8B4513'; // Brown
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2 - 100, canvas.height / 2 - 50, 50, 0, 2 * Math.PI);
+            ctx.fill();
+
+             // Endoplasmic Reticulum (rough approximation)
+             ctx.strokeStyle = '#FFA07A'; // Light Salmon
+             ctx.lineWidth = 3;
+             ctx.beginPath();
+             ctx.moveTo(canvas.width / 2 + 50, canvas.height / 2 + 20);
+             ctx.bezierCurveTo(
+                 canvas.width / 2 + 150, canvas.height / 2 - 80,
+                 canvas.width / 2 + 250, canvas.height / 2 + 80,
+                 canvas.width / 2 + 100, canvas.height / 2 + 150
+             );
+             ctx.stroke();
+
+             ctx.font = '48px Patrick Hand';
+             ctx.fillStyle = '#fff';
+             ctx.fillText('Gibberellins (GAs)', 100, 100);
+
+        } else if (time >= 6 && time < 9) {
+            // Scene 3
+            ctx.fillStyle = '#a0522d'; // Sienna soil
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+
+            // Seed
+            ctx.fillStyle = '#8b4513'; // Brown
+            ctx.beginPath();
+            ctx.ellipse(canvas.width / 4, canvas.height / 2 + 100, 30, 20, 0, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Radicle emerging
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            roughLine(canvas.width / 4, canvas.height / 2 + 110, canvas.width / 4, canvas.height, '#fff');
+
+            // Rice Paddy
+            ctx.fillStyle = '#32cd32'; // Lime Green
+            ctx.fillRect(canvas.width / 2, canvas.height / 2, canvas.width / 2, canvas.height / 2);
+
+            drawStickFigure(1600, 800, 'idle', 1.5, '#000');
+            ctx.font = '48px Patrick Hand';
+            ctx.fillStyle = '#000';
+            ctx.fillText('Seed Germination', 700, 100);
+
+        } else if (time >= 9 && time < 12) {
+            // Scene 4
+             // Background
+             ctx.fillStyle = '#e0e0e0'; // Light Gray
+             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+             // GA1 Structure (Simplified)
+             ctx.strokeStyle = '#000'; // Black
+             ctx.lineWidth = 2;
+             ctx.strokeRect(100, 200, 200, 150);
+             ctx.font = '24px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('GA1', 150, 190);
+
+             // GA3 Structure (Simplified)
+             ctx.strokeStyle = '#000'; // Black
+             ctx.lineWidth = 2;
+             ctx.strokeRect(400, 200, 200, 150);
+             ctx.font = '24px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('GA3', 450, 190);
+
+             // GA4 Structure (Simplified)
+             ctx.strokeStyle = '#000'; // Black
+             ctx.lineWidth = 2;
+             ctx.strokeRect(700, 200, 200, 150);
+             ctx.font = '24px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('GA4', 750, 190);
+
+
+             ctx.fillStyle = 'green';
+             ctx.fillRect(150, 400, 50, 200);
+             ctx.fillStyle = 'blue';
+             ctx.fillRect(450, 400, 50, 300);
+             ctx.fillStyle = 'red';
+             ctx.fillRect(750, 400, 50, 100);
+
+             ctx.font = '48px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('GA Activity Comparison', 100, 100);
+
+        } else if (time >= 12 && time < 16) {
+            // Scene 5
+            ctx.fillStyle = '#66bb6a';
+            ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+
+            ctx.fillStyle = '#81c784';
+            ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+             // Tall Wheat
+            ctx.strokeStyle = '#d4e157'; // Yellow-Green
+            ctx.lineWidth = 4;
+            roughLine(canvas.width / 4, canvas.height - 100, canvas.width / 4, 100, '#d4e157');
+            roughLine(canvas.width / 4 - 20, 100, canvas.width / 4 + 20, 100, '#d4e157');
+
+            // Short Wheat
+            ctx.strokeStyle = '#d4e157'; // Yellow-Green
+            ctx.lineWidth = 4;
+            roughLine(canvas.width * 3 / 4, canvas.height - 100, canvas.width * 3 / 4, 300, '#d4e157');
+            roughLine(canvas.width * 3 / 4 - 20, 300, canvas.width * 3 / 4 + 20, 300, '#d4e157');
+
+            ctx.font = '48px Patrick Hand';
+            ctx.fillStyle = '#000';
+            ctx.fillText('Selective Breeding', 100, 100);
+        } else if (time >= 16 && time < 20) {
+            // Scene 6
+            ctx.fillStyle = '#ffca28'; // Amber
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Energy Flow Diagram (Simplified)
+            ctx.strokeStyle = '#000'; // Black
+            ctx.lineWidth = 3;
+
+            // Sun
+            ctx.beginPath();
+            ctx.arc(100, 100, 50, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.font = '24px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('Sunlight', 50, 170);
+
+             roughLine(100,150, canvas.width/2,300,'black');
+             ctx.font = '24px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('Plant', canvas.width/2-50,350);
+             ctx.strokeRect(canvas.width/2-70,300,100,50);
+
+             roughLine(canvas.width/2,300, canvas.width-100,700,'black');
+             ctx.font = '24px Patrick Hand';
+             ctx.fillStyle = '#000';
+             ctx.fillText('Grain', canvas.width-150,750);
+             ctx.strokeRect(canvas.width-170,700,100,50);
+
+             drawStickFigure(100, 700, 'running', 1.5, '#000');
+            ctx.font = '48px Patrick Hand';
+            ctx.fillStyle = '#000';
+            ctx.fillText('Energy Flow', 100, 100);
+        } else if (time >= 20 && time < 26) {
+            // Scene 7
+            ctx.fillStyle = '#43a047'; // Darker Green
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Rice Paddies
+            ctx.fillStyle = '#a5d6a7'; // Lighter Green
+            for (let i = 0; i < 5; i++) {
+                ctx.fillRect(i * 300 + 50, 200, 250, 150);
+            }
+             drawStickFigure(100, 700, 'idle', 1.5, '#000');
+            ctx.font = '48px Patrick Hand';
+            ctx.fillStyle = '#000';
+            ctx.fillText('Green Revolution', 100, 100);
+        }
+         else if (time >= 26 && time < 30) {
+            // Scene 8
+            ctx.fillStyle = '#e1bee7';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+             drawStickFigure(300, 700, 'thinking', 2, '#9c27b0');
+            ctx.font = '48px Patrick Hand';
+            ctx.fillStyle = '#000';
+            ctx.fillText('Future of Food Security', 100, 100);
+
+        }
+    }
+
+    function updateSubtitles(time) {
+        for (let i = 0; i < narration.length; i++) {
+            if (time >= narration[i].time && (i === narration.length - 1 || time < narration[i + 1].time)) {
+                subtitles.textContent = narration[i].text;
+                return;
+            }
+        }
+        subtitles.textContent = '';
+    }
+
+    function updateTimeline(time) {
+        const progress = (time / duration) * 100;
+        timeline.value = progress;
+        document.getElementById('timeline-progress').style.width = `${progress}%`;
+
+        const currentMinutes = Math.floor(time / 60).toString().padStart(2, '0');
+        const currentSeconds = Math.floor(time % 60).toString().padStart(2, '0');
+        const durationMinutes = Math.floor(duration / 60).toString().padStart(2, '0');
+        const durationSeconds = Math.floor(duration % 60).toString().padStart(2, '0');
+        timecode.textContent = `${currentMinutes}:${currentSeconds} / ${durationMinutes}:${durationSeconds}`;
+    }
+
+    function animationLoop(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const dt = (timestamp - startTime) / 1000;
+        startTime = timestamp;
+        currentTime += dt;
+
+        if (currentTime > duration) {
+            currentTime = 0;
+            isPlaying = false;
+            playPauseBtn.textContent = 'Play';
+        }
+
+        renderScene(currentTime);
+        updateSubtitles(currentTime);
+        updateTimeline(currentTime);
+
+        animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    function togglePlayPause() {
+        if (isPlaying) {
+            cancelAnimationFrame(animationFrameId);
+            isPlaying = false;
+            playPauseBtn.textContent = 'Play';
+        } else {
+            startTime = performance.now() - (currentTime * 1000);
+            animationLoop();
+            isPlaying = true;
+            playPauseBtn.textContent = 'Pause';
+        }
+    }
+
+    playPauseBtn.addEventListener('click', togglePlayPause);
+
+    timeline.addEventListener('input', () => {
+        const selectedTime = (timeline.value / 100) * duration;
+        currentTime = selectedTime;
+        startTime = performance.now() - (currentTime * 1000);
+        renderScene(currentTime);
+        updateSubtitles(currentTime);
+        updateTimeline(currentTime);
+    });
+
+    durationInput.addEventListener('change', () => {
+        duration = parseInt(durationInput.value);
+        currentTime = 0;
+        updateTimeline(currentTime);
+    });
+
+    exportBtn.addEventListener('click', () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            exportBtn.textContent = 'Export Video';
+        } else {
+            recordedChunks = [];
+            const stream = canvas.captureStream(24);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+            exportBtn.textContent = 'Stop Export';
+        }
+    });
+
+    // Initialize
+    updateTimeline(0);
+</script>
+</body>
+</html>

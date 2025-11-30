@@ -1,0 +1,5 @@
+# This file is used internally by FFMPEG.
+file 'file:D:/Projects/Rusaldo/temp/videos/scene_3/480p15/partial_movie_files/Scene3/4121329759_3953953278_223132457.mp4'
+file 'file:D:/Projects/Rusaldo/temp/videos/scene_3/480p15/partial_movie_files/Scene3/1508447293_1959358871_4078739447.mp4'
+file 'file:D:/Projects/Rusaldo/temp/videos/scene_3/480p15/partial_movie_files/Scene3/1508447293_1702560742_1363162206.mp4'
+file 'file:D:/Projects/Rusaldo/temp/videos/scene_3/480p15/partial_movie_files/Scene3/1508447293_3890345977_621508015.mp4'

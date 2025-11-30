@@ -1,0 +1,392 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cellular Respiration: The Body's Kitchen</title>
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #fffcf5;
+  font-family: 'Patrick Hand', cursive;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100vh;
+}
+
+canvas {
+  border: none;
+}
+
+#subtitle-card {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 15px;
+  padding: 10px 20px;
+  margin-top: 10px;
+  text-align: center;
+  width: 80%;
+  max-width: 1200px; /* Match canvas width */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80%;
+  max-width: 1200px;
+  padding: 10px;
+}
+
+#timeline {
+  flex-grow: 1;
+  margin: 0 10px;
+}
+
+#duration-slider {
+  width: 80%;
+  max-width: 1200px;
+}
+</style>
+</head>
+<body>
+<canvas id="animationCanvas" width="1920" height="1080"></canvas>
+<div id="subtitle-card">
+    <p id="subtitle-text"> </p>
+</div>
+<div id="controls">
+    <button id="play-pause-button">Play</button>
+    <input type="range" id="timeline" value="0" step="0.01">
+    <label id="timecode">00:00</label>
+    <button id="export-button">Export Video</button>
+</div>
+<input type="range" id="duration-slider" min="30" max="180" value="30">
+<script>
+const canvas = document.getElementById('animationCanvas');
+const ctx = canvas.getContext('2d');
+const subtitleText = document.getElementById('subtitle-text');
+const playPauseButton = document.getElementById('play-pause-button');
+const timelineSlider = document.getElementById('timeline');
+const timecodeLabel = document.getElementById('timecode');
+const exportButton = document.getElementById('export-button');
+const durationSlider = document.getElementById('duration-slider');
+
+let animationFrameId;
+let isPlaying = true;
+let startTime = 0;
+let currentTime = 0;
+let duration = 30;
+let mediaRecorder;
+let recordedChunks = [];
+
+// Narration data with timestamps
+const narration = [
+  { time: 0, text: "Ever wonder how your favorite cake turns into the energy you need to bake another one? It all starts with cellular respiration, a microscopic kitchen inside every living cell." },
+  { time: 4, text: "Imagine sunlight energizing a lush green plant, a key ingredient to start our recipe." },
+  { time: 7, text: "Deep inside the leaves, plant cells grab that light and transform carbon dioxide and water into sugary energy." },
+  { time: 10, text: "Your body uses oxygen to ‘cook’ those sugars and fats, just like a chef controlling the flame under a pot." },
+  { time: 15, text: "This process releases energy in the form of ATP, the cell's energy currency, powering everything from muscle movement to brain function." },
+  { time: 20, text: "Cellular respiration is the engine of life, turning the food you love into the power that keeps you going!" },
+  { time: 26, text: "So, appreciate the process, and remember: every bite is a potential spark!" }
+];
+
+// Utility function for wobbly lines
+function roughLine(x1, y1, x2, y2, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x1 + Math.random() * 3 - 1.5, y1 + Math.random() * 3 - 1.5);
+  ctx.lineTo(x2 + Math.random() * 3 - 1.5, y2 + Math.random() * 3 - 1.5);
+  ctx.stroke();
+}
+
+// Utility function for drawing stick figures
+function drawStickFigure(x, y, pose, scale, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 5;
+
+  switch (pose) {
+    case 'idle':
+      // Head
+      ctx.beginPath();
+      ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      // Body
+      roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+      // Arms
+      roughLine(x, y, x - 30 * scale, y + 20 * scale, color);
+      roughLine(x, y, x + 30 * scale, y + 20 * scale, color);
+
+      // Legs
+      roughLine(x, y + 50 * scale, x - 30 * scale, y + 100 * scale, color);
+      roughLine(x, y + 50 * scale, x + 30 * scale, y + 100 * scale, color);
+      break;
+
+    case 'thinking':
+      // Head
+      ctx.beginPath();
+      ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      // Body
+      roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+      // Arms (thinking pose)
+      roughLine(x, y + 10 * scale, x - 20 * scale, y + 10 * scale, color);
+      roughLine(x - 20 * scale, y + 10 * scale, x - 40 * scale, y, color);
+
+      roughLine(x, y + 10 * scale, x + 20 * scale, y + 10 * scale, color);
+      roughLine(x + 20 * scale, y + 10 * scale, x + 40 * scale, y, color);
+
+      // Legs
+      roughLine(x, y + 50 * scale, x - 30 * scale, y + 100 * scale, color);
+      roughLine(x, y + 50 * scale, x + 30 * scale, y + 100 * scale, color);
+      break;
+
+    case 'running':
+      // Head
+      ctx.beginPath();
+      ctx.arc(x, y - 50 * scale, 20 * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      // Body
+      roughLine(x, y - 30 * scale, x, y + 50 * scale, color);
+
+      // Arms (running pose)
+      roughLine(x, y, x - 40 * scale, y - 10 * scale, color);
+      roughLine(x, y, x + 40 * scale, y + 30 * scale, color);
+
+      // Legs (running pose)
+      roughLine(x, y + 50 * scale, x - 40 * scale, y + 80 * scale, color);
+      roughLine(x, y + 50 * scale, x + 40 * scale, y + 120 * scale, color);
+      break;
+  }
+}
+
+function renderScene(time) {
+  ctx.fillStyle = '#fffcf5';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let currentSubtitle = "";
+  for (let i = 0; i < narration.length; i++) {
+    if (time >= narration[i].time) {
+      currentSubtitle = narration[i].text;
+    }
+  }
+  subtitleText.textContent = currentSubtitle;
+
+  const sceneTime = time % duration;
+
+  if (sceneTime >= 0 && sceneTime < 4) {
+    // Scene 1: Cake transforming into baker
+    const bakerX = 1000;
+    const bakerY = 700;
+
+    //cake slice
+    ctx.fillStyle = '#D2691E';
+    ctx.fillRect(100, 700, 200, 100);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(100, 680, 200, 20);
+
+    drawStickFigure(bakerX, bakerY, 'running', 2, 'blue');
+    drawStickFigure(bakerX-200, bakerY, 'running', 1.5, 'red');
+    drawStickFigure(bakerX+200, bakerY, 'running', 1, 'green');
+
+  } else if (sceneTime >= 4 && sceneTime < 7) {
+    // Scene 2: Sunlight on leaf
+    ctx.fillStyle = 'green';
+    ctx.beginPath();
+    ctx.ellipse(960, 540, 200, 100, 0, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = 'yellow';
+    ctx.fillRect(0, 0, canvas.width, sceneTime*30);
+
+  } else if (sceneTime >= 7 && sceneTime < 10) {
+    // Scene 3: Inside plant cell
+    ctx.fillStyle = 'rgba(144,238,144,0.5)'; // LightGreen with opacity
+    ctx.beginPath();
+    ctx.arc(960, 540, 300, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Draw water molecules (H2O)
+    ctx.fillStyle = 'blue';
+    ctx.beginPath();
+    ctx.arc(400, 400, 15, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.arc(420, 400, 8, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(420, 425, 8, 0, 2 * Math.PI);
+    ctx.fill();
+    //carbon dioxide molecule
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(1500, 600, 20, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.arc(1600, 600, 15, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1400, 600, 15, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = 'yellow';
+    ctx.fillRect(700, 700, 200, sceneTime*10);
+
+  } else if (sceneTime >= 10 && sceneTime < 15) {
+    // Scene 4: Cooking sugars with oxygen
+    ctx.fillStyle = 'orange';
+    ctx.beginPath();
+    ctx.arc(960, 540, 150, 0, 2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.arc(1100, 400, 50, 0, 2 * Math.PI);
+    ctx.fill();
+
+    drawStickFigure(400, 500, 'idle', 1, 'purple');
+
+  } else if (sceneTime >= 15 && sceneTime < 20) {
+    // Scene 5: ATP molecules powering actions
+    ctx.fillStyle = 'yellow';
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, 30, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    drawStickFigure(200, 900, 'running', 1.2, 'pink');
+    drawStickFigure(1600, 900, 'thinking', 1, 'grey');
+
+  } else if (sceneTime >= 20 && sceneTime < 26) {
+    // Scene 6: Montage of activities
+    drawStickFigure(300, 800, 'running', 1.5, 'blue');
+    drawStickFigure(960, 800, 'thinking', 1.5, 'green');
+    drawStickFigure(1600, 800, 'idle', 1.5, 'red');
+    ctx.fillStyle = 'cyan';
+    ctx.fillRect(0, 0, sceneTime*100, 50);
+
+
+  } else if (sceneTime >= 26 && sceneTime < 30) {
+    // Scene 7: Bite of food
+    ctx.fillStyle = 'brown';
+    ctx.fillRect(860, 500, 200, 100);
+    ctx.fillStyle = 'yellow';
+    ctx.fillRect(860, 480, 200, 20);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(860, 460, 200, 20);
+  }
+
+  timecodeLabel.textContent = formatTime(time);
+  timelineSlider.value = time;
+}
+
+function formatTime(time) {
+    const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+    const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+    return `${minutes}:${seconds}`;
+}
+
+function animate(timestamp) {
+  if (startTime === 0) startTime = timestamp;
+  const dt = (timestamp - startTime) / 1000;
+  startTime = timestamp;
+  currentTime += dt;
+  if (currentTime > duration) {
+    currentTime = 0;
+  }
+  renderScene(currentTime);
+  animationFrameId = requestAnimationFrame(animate);
+}
+
+function togglePlayPause() {
+  if (isPlaying) {
+    cancelAnimationFrame(animationFrameId);
+    playPauseButton.textContent = 'Play';
+  } else {
+    startTime = performance.now() - (currentTime * 1000);
+    animate(performance.now());
+    playPauseButton.textContent = 'Pause';
+  }
+  isPlaying = !isPlaying;
+}
+
+function updateTimeline() {
+    currentTime = parseFloat(timelineSlider.value);
+    renderScene(currentTime);
+}
+
+function startRecording() {
+    recordedChunks = [];
+    const stream = canvas.captureStream(24);
+    const options = { mimeType: 'video/webm;codecs=vp9' };
+    mediaRecorder = new MediaRecorder(stream, options);
+
+    mediaRecorder.ondataavailable = handleDataAvailable;
+    mediaRecorder.onstop = handleStop;
+
+    mediaRecorder.start();
+    exportButton.textContent = 'Stop Export';
+}
+
+function stopRecording() {
+    mediaRecorder.stop();
+    exportButton.textContent = 'Export Video';
+}
+
+function handleDataAvailable(event) {
+    if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+    }
+}
+
+function handleStop() {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'animation.webm';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function exportVideo() {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+function updateDuration() {
+    duration = parseInt(durationSlider.value);
+    timelineSlider.max = duration;
+    currentTime = 0;
+    timelineSlider.value = 0;
+    renderScene(0);
+}
+
+playPauseButton.addEventListener('click', togglePlayPause);
+timelineSlider.addEventListener('input', updateTimeline);
+exportButton.addEventListener('click', exportVideo);
+durationSlider.addEventListener('input', updateDuration);
+
+timelineSlider.max = duration;
+animate(0);
+</script>
+</body>
+</html>
