@@ -36,6 +36,9 @@ services:
     buildCommand: cd v0-design && npm ci && npm run build
     staticPublishPath: v0-design/out
     plan: free
+    nixpacks:
+      variables:
+        NODE_VERSION: "20"
     envVars:
       - key: NODE_ENV
         value: production
