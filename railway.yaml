@@ -1,7 +1,7 @@
 # Railway Fullstack Deployment
 
 services:
-  # Backend Service (Streamlit)
+  # Backend Service (Streamlit) - DEPLOY THIS FIRST
   - type: web
     name: sophi-backend
     env: docker
@@ -29,15 +29,15 @@ services:
       - key: RUNWAY_API_KEY
         sync: false
 
-  # Frontend Service (Next.js)
-  - type: web
-    name: sophi-frontend
-    env: docker
-    dockerfilePath: ./Dockerfile.frontend
-    plan: free
-    healthCheckPath: /
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        value: ${sophi-backend.url}
+  # Frontend Service (Next.js) - SKIP FOR NOW
+  # - type: web
+  #   name: sophi-frontend
+  #   env: docker
+  #   dockerfilePath: ./Dockerfile.frontend
+  #   plan: free
+  #   healthCheckPath: /
+  #   envVars:
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: NEXT_PUBLIC_API_URL
+  #       value: ${sophi-backend.url}
