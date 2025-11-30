@@ -19,5 +19,5 @@ RUN npm run build
 # Expose port
 EXPOSE 3000
 
-# Start the application
-CMD ["npm", "start"]
+# Start Next.js with Railway's PORT
+CMD ["sh", "-c", "next start -p $PORT"]
