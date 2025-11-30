@@ -1,0 +1,23 @@
+# Frontend Dockerfile for Railway
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy frontend package files
+COPY v0-design/package*.json ./
+COPY v0-design/tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY v0-design/ ./
+
+# Build the application
+RUN npm run build
+
+# Expose port
+EXPOSE 3000
+
+# Start the application
+CMD ["npm", "start"]

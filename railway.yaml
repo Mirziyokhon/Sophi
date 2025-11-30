@@ -32,13 +32,10 @@ services:
   # Frontend Service (Next.js)
   - type: web
     name: sophi-frontend
-    env: static
-    buildCommand: cd v0-design && npm ci && npm run build
-    staticPublishPath: v0-design/out
+    env: docker
+    dockerfilePath: ./Dockerfile.frontend
     plan: free
-    nixpacks:
-      variables:
-        NODE_VERSION: "20"
+    healthCheckPath: /
     envVars:
       - key: NODE_ENV
         value: production
