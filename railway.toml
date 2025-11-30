@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.streamlit"
+dockerfilePath = "Dockerfile.render"
 
 [deploy]
 healthcheckPath = "/_stcore/health"
@@ -11,3 +11,12 @@ restartPolicyMaxRetries = 10
 [env]
 PYTHON_VERSION = "3.11"
 PORT = "8501"
+
+# API Keys (set these in Railway dashboard)
+OPENAI_API_KEY = ""
+GEMINI_API_KEY = ""
+ELEVENLABS_API_KEY = ""
+STABILITY_API_KEY = ""
+HUGGINGFACE_API_KEY = ""
+REPLICATE_API_KEY = ""
+RUNWAY_API_KEY = ""
