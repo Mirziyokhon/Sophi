@@ -4,12 +4,13 @@ FROM node:20-alpine AS frontend
 # Set working directory for frontend
 WORKDIR /app/frontend
 
-# Copy frontend package files
+# Copy frontend package files and config
 COPY v0-design/package*.json ./
 COPY v0-design/.nvmrc ./
+COPY v0-design/tsconfig.json ./
 
-# Install frontend dependencies
-RUN npm ci --only=production
+# Install frontend dependencies (including dev dependencies needed for build)
+RUN npm ci
 
 # Copy frontend source code
 COPY v0-design/ ./
