@@ -1,0 +1,7 @@
+# Manim Community Edition for whiteboard animations
+manim==0.18.0
+
+# Additional dependencies for Manim
+pycairo>=1.23.0
+manimpango>=0.5.0
+scipy>=1.10.0
