@@ -1,13 +1,13 @@
 # Railway Fullstack Deployment
 
 services:
-  # Backend Service (Streamlit) - DEPLOY THIS FIRST
+  # Backend Service (Streamlit) - ULTRA MINIMAL
   - type: web
     name: sophi-backend
     env: docker
-    dockerfilePath: ./Dockerfile.clean
+    dockerfilePath: ./Dockerfile.minimal
     plan: free
-    healthCheckPath: /_stcore/health
+    healthCheckPath: /
     envVars:
       - key: PORT
         value: 8501

@@ -1,0 +1,25 @@
+# Ultra-minimal Dockerfile - ONLY Streamlit
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy ONLY app.py
+COPY app.py .
+
+# Create directories
+RUN mkdir -p uploads videos temp
+
+# Expose port
+EXPOSE 8501
+
+# Run Streamlit ONLY
+CMD streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
