@@ -4,7 +4,7 @@ import { UploadIcon, FileText, LinkIcon, Loader2 } from 'lucide-react'
 import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
-import { api } from '@/lib/api'
+import { api } from '../lib/api'
 import { toast } from 'sonner'
 
 interface UploadProps {

@@ -4,7 +4,7 @@ import { Share2, Share, MessageCircle, Copy, Check, ExternalLink } from 'lucide-
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
-import { api } from '@/lib/api'
+import { api } from '../lib/api'
 import { SketchAnimationPlayer } from './sketch-animation-player'
 
 interface PlayerProps {

@@ -1,7 +1,7 @@
 'use client'
 
 import { SyntheticEvent, useEffect, useState } from 'react'
-import { api, VideoData } from '@/lib/api'
+import { api, VideoData } from '../lib/api'
 import { Download, Play, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'

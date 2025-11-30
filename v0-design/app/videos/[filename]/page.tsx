@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Download, Share2, Copy, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { api, VideoData } from '@/lib/api'
+import { api, VideoData } from '../../../lib/api'
 import { toast } from 'sonner'
 
 export default function VideoPage() {

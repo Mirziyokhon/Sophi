@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
-import { api } from '@/lib/api'
+import { api } from '../lib/api'
 import { toast } from 'sonner'
 
 interface ProcessingProps {
