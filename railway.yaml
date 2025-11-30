@@ -5,7 +5,7 @@ services:
   - type: web
     name: sophi-backend
     env: docker
-    dockerfilePath: ./Dockerfile.render
+    dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /_stcore/health
     envVars:
