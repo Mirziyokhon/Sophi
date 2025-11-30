@@ -1,5 +1,6 @@
-# Exclude frontend from Railway backend deployment
+# Exclude frontend and API from Railway backend deployment
 v0-design/
+api/
 node_modules/
 .git/
 .gitignore
@@ -7,7 +8,5 @@ README.md
 *.md
 .env
 .env.*
-Dockerfile*
 docker-compose*
-railway.yaml
 render.yaml
