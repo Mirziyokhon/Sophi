@@ -1,7 +1,18 @@
 [nixpacks]
-phases = { build = { cmds = [
-    "pip install --no-cache-dir -r requirements.txt"
-] } }
+# Explicitly configure Python deployment
+phases = { 
+  build = { 
+    cmds = [
+      "apt-get update && apt-get install -y ffmpeg tesseract-ocr libtesseract-dev",
+      "pip install --no-cache-dir -r requirements.txt"
+    ] 
+  } 
+}
 
 [start]
 cmd = "sh -c 'python health_server.py & streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true'"
+
+# Environment variables
+[variables]
+PYTHON_VERSION = "3.11"
+NODE_VERSION = "20"
