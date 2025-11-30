@@ -1,0 +1,7 @@
+[nixpacks]
+phases = { build = { cmds = [
+    "pip install --no-cache-dir -r requirements.txt"
+] } }
+
+[start]
+cmd = "sh -c 'python health_server.py & streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true'"
