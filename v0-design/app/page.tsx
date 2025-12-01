@@ -47,7 +47,7 @@ export default function Home() {
       <div className="fixed inset-0 z-0">
         <BackgroundGrid />
       </div>
-      <div className="relative z-10 flex flex-col flex-grow min-h-screen">
+      <div className="relative z-20 flex flex-col flex-grow min-h-screen">
         <Header 
           onLogoClick={handleLogoClick} 
           onNavigateToLibrary={handleNavigateToLibrary}

@@ -30,12 +30,11 @@ export function Login({ onSuccess, onSwitchToSignup, onHome, onNavigateToLibrary
   return (
     <div className="min-h-screen bg-background">
       <Header 
-        onLogoClick={onHome}
-        onNavigateToLibrary={onNavigateToLibrary}
-        onNavigateToPricing={onNavigateToPricing}
-        onNavigateToContact={onNavigateToContact}
+        onLogoClick={onHome || (() => {})}
+        onNavigateToLibrary={onNavigateToLibrary || (() => {})}
+        onNavigateToContact={onNavigateToContact || (() => {})}
         onNavigateToLogin={() => {}}
-        onNavigateToSignup={onSwitchToSignup}
+        onNavigateToSignup={onSwitchToSignup || (() => {})}
         showLogo={true}
       />
 
@@ -49,7 +48,7 @@ export function Login({ onSuccess, onSwitchToSignup, onHome, onNavigateToLibrary
           <div className="bg-card border border-border rounded-2xl p-8 space-y-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
-              <p className="text-muted-foreground">Sign in to your Rusaldo account</p>
+              <p className="text-muted-foreground">Sign in to your Sophi account</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -36,11 +36,10 @@ export function Signup({ onSuccess, onSwitchToLogin, onHome, onNavigateToLibrary
   return (
     <div className="min-h-screen bg-background">
       <Header 
-        onLogoClick={onHome}
-        onNavigateToLibrary={onNavigateToLibrary}
-        onNavigateToPricing={onNavigateToPricing}
-        onNavigateToContact={onNavigateToContact}
-        onNavigateToLogin={onSwitchToLogin}
+        onLogoClick={onHome || (() => {})}
+        onNavigateToLibrary={onNavigateToLibrary || (() => {})}
+        onNavigateToContact={onNavigateToContact || (() => {})}
+        onNavigateToLogin={onSwitchToLogin || (() => {})}
         onNavigateToSignup={() => {}}
         showLogo={true}
       />
@@ -55,7 +54,7 @@ export function Signup({ onSuccess, onSwitchToLogin, onHome, onNavigateToLibrary
           <div className="bg-card border border-border rounded-2xl p-8 space-y-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold mb-2">Create Account</h1>
-              <p className="text-muted-foreground">Join Rusaldo to start learning through your passion</p>
+              <p className="text-muted-foreground">Join Sophi to start learning through your passion</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">

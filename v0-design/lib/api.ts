@@ -77,7 +77,7 @@ export interface SettingsResponse {
   }
 }
 
-class RusaldoAPI {
+class SophiAPI {
   private baseURL: string
 
   constructor(baseURL: string = API_BASE_URL) {
@@ -260,5 +260,5 @@ class RusaldoAPI {
 }
 
 // Export singleton instance
-export const api = new RusaldoAPI()
+export const api = new SophiAPI()
 export default api

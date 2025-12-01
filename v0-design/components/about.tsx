@@ -103,7 +103,6 @@ export default function About() {
       role_description: "Builds data pipelines and processes structured information for machine learning models",
       skills: ["Python", "SQL", "Data Analytics", "ETL Pipelines"],
       stack: ["Economics & Data Analytics Track · TSUE", "Academic and research projects in analytics"],
-      link: "https://www.linkedin.com/in/shakhzod-sultonov-b6363b335",
       image: "/shokhzod1.jpg"
     },
     {
@@ -294,12 +293,14 @@ export default function About() {
                     <div className="flex-grow">
                       <h3 className="font-bold text-2xl mb-2">{teamMembers[selectedMember].name}</h3>
                       <p className="text-primary font-medium mb-4">{teamMembers[selectedMember].role}</p>
-                      <a 
-                        href={teamMembers[selectedMember].link}
-                        className="text-primary hover:text-blue-400/80 text-sm font-medium flex items-center gap-1 mb-4"
-                      >
-                        LinkedIn →
-                      </a>
+                      {teamMembers[selectedMember].link && (
+                        <a 
+                          href={teamMembers[selectedMember].link}
+                          className="text-primary hover:text-blue-400/80 text-sm font-medium flex items-center gap-1 mb-4"
+                        >
+                          LinkedIn →
+                        </a>
+                      )}
                     </div>
                   </div>
                   
@@ -1016,8 +1017,8 @@ export default function About() {
   return (
     <div className="min-h-screen bg-[#050A18] text-white font-sans selection:bg-blue-500/30 overflow-x-hidden relative flex flex-col">
       <BackgroundGrid />
-      <div className="relative z-10 flex flex-col flex-grow min-h-screen">
-        <div className="flex-grow pt-32 pb-12">
+      <div className="relative z-10 flex flex-col flex-grow">
+        <div className="flex-grow pt-32 pb-32">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -1125,7 +1126,7 @@ export default function About() {
         {/* Content rendering based on active section */}
         {renderContent()}
         </div>
-      </div>
+        </div>
       </div>
       <Footer />
     </div>

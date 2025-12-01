@@ -23,8 +23,8 @@ export function Contact() {
   return (
     <div className="min-h-screen bg-[#050A18] text-white font-sans selection:bg-blue-500/30 overflow-x-hidden relative flex flex-col">
       <BackgroundGrid />
-      <div className="relative z-10 flex flex-col flex-grow min-h-screen">
-        <div className="flex-grow pt-32 pb-20 px-4">
+      <div className="relative z-10 flex flex-col flex-grow">
+        <div className="flex-grow pt-32 pb-32 px-4">
         <div className="max-w-6xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -50,24 +50,24 @@ export function Contact() {
             >
               <div>
                 <h3 className="text-lg font-semibold mb-2">Email</h3>
-                <a href="mailto:hello@rusaldo.com" className="text-primary hover:underline cursor-pointer">
-                  hello@rusaldo.com
+                <a href="mailto:hello@sophi.com" className="text-primary hover:underline cursor-pointer">
+                  hello@sophi.com
                 </a>
                 <p className="text-gray-400 text-sm mt-1">For general inquiries</p>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold mb-2">Support</h3>
-                <a href="mailto:support@rusaldo.com" className="text-primary hover:underline cursor-pointer">
-                  support@rusaldo.com
+                <a href="mailto:support@sophi.com" className="text-primary hover:underline cursor-pointer">
+                  support@sophi.com
                 </a>
                 <p className="text-gray-400 text-sm mt-1">We'll help you get unstuck</p>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold mb-2">Business</h3>
-                <a href="mailto:business@rusaldo.com" className="text-primary hover:underline cursor-pointer">
-                  business@rusaldo.com
+                <a href="mailto:business@sophi.com" className="text-primary hover:underline cursor-pointer">
+                  business@sophi.com
                 </a>
                 <p className="text-gray-400 text-sm mt-1">For partnerships and sales</p>
               </div>
@@ -157,7 +157,7 @@ export function Contact() {
             </motion.div>
           </div>
         </div>
-      </div>
+        </div>
       </div>
       <Footer />
     </div>

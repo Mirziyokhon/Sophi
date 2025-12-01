@@ -126,525 +126,627 @@ export function Landing({ onStart }: LandingProps) {
     }
 
     const initAnimations = () => {
-      const gsap = (window as any).gsap
-      const ScrollTrigger = (window as any).ScrollTrigger
-      
-      if (!gsap || !ScrollTrigger) return
-      
-      gsap.registerPlugin(ScrollTrigger)
+    const gsap = (window as any).gsap
+    const ScrollTrigger = (window as any).ScrollTrigger
+    
+    if (!gsap || !ScrollTrigger) return
+    
+    gsap.registerPlugin(ScrollTrigger)
 
-      // Clear existing ScrollTrigger instances
-      ScrollTrigger.getAll().forEach((trigger: any) => trigger.kill())
+    // Clear existing ScrollTrigger instances
+    ScrollTrigger.getAll().forEach((trigger: any) => trigger.kill())
 
-      // STEP 1: Animated cursor moves to Start button
-      if (step1Ref.current && cursorRef.current) {
-        const button = step1Ref.current.querySelector('button')
-        console.log('🎯 Setting up Step 1 cursor animation...', { 
-          step1Ref: !!step1Ref.current, 
-          cursorRef: !!cursorRef.current,
-          button: !!button
-        })
-        
-        // Test: Make cursor visible briefly to verify it's working
+    // Cursor visibility test - show actual cursor image
+    if (cursorRef.current) {
+      console.log('🎯 Testing cursor visibility...')
+      // Force cursor to be visible with inline styles
+      cursorRef.current.style.cssText = `
+        position: fixed !important;
+        left: 200px !important;
+        top: 200px !important;
+        width: 36px !important;
+        height: 36px !important;
+        opacity: 1 !important;
+        display: block !important;
+        visibility: visible !important;
+        z-index: 999999 !important;
+        pointer-events: none !important;
+        background-color: transparent !important;
+        border-radius: 0 !important;
+      `
+      
+      setTimeout(() => {
         if (cursorRef.current) {
-          gsap.set(cursorRef.current, {
-            left: 200,
-            top: 200,
-            opacity: 1,
-            display: 'block',
-            visibility: 'visible',
-            zIndex: 99999
-          })
-          setTimeout(() => {
-            if (cursorRef.current) {
-              gsap.set(cursorRef.current, {
-                left: -10000,
-                top: -10000,
-                opacity: 0,
-                display: 'none',
-                visibility: 'hidden'
+          console.log('🎯 Hiding cursor after test')
+          cursorRef.current.style.cssText = `
+            position: fixed !important;
+            left: -10000px !important;
+            top: -10000px !important;
+            width: 36px !important;
+            height: 36px !important;
+            opacity: 0 !important;
+            display: none !important;
+            visibility: hidden !important;
+            z-index: 999999 !important;
+            pointer-events: none !important;
+            background-color: transparent !important;
+            border-radius: 0 !important;
+          `
+        }
+      }, 3000)
+    }
+
+    // STEP 1: Start Button Animation
+    if (step1Ref.current && cursorRef.current) {
+      const button = step1Ref.current.querySelector('button')
+      
+      if (button) {
+        ScrollTrigger.create({
+          trigger: step1Ref.current,
+          start: 'top 60%',
+          end: 'bottom 40%',
+          scrub: false, // No scrub for instant 60 FPS
+          onUpdate: (self: any) => {
+            const progress = self.progress
+            const step1Rect = step1Ref.current!.getBoundingClientRect()
+            const buttonRect = button.getBoundingClientRect()
+            
+            // Calculate positions
+            const startX = step1Rect.left + 100
+            const startY = step1Rect.top + 100
+            const endX = buttonRect.left + buttonRect.width / 2
+            const endY = buttonRect.top + buttonRect.height / 2
+            const descendAmount = 30
+            
+            // Phase 1: Move to button (0-35%)
+            if (progress < 0.35) {
+              const moveProgress = progress / 0.35
+              const currentX = startX + (endX - startX) * moveProgress
+              const currentY = startY + (endY - startY) * moveProgress + (descendAmount * progress)
+              
+              // Change to pointing cursor when entering button area (at 20%)
+              if (progress > 0.2 && cursorType !== 'pointing') {
+                setCursorType('pointing')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${currentX}px !important;
+                  top: ${currentY}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(1) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              // Button glow starts at 15%
+              if (progress > 0.15) {
+                const glowProgress = (progress - 0.15) / 0.1
+                gsap.set(button, {
+                  boxShadow: `0 0 ${20 * glowProgress}px rgba(59, 130, 246, ${0.5 * glowProgress})`
+                })
+              }
+            }
+            // Phase 2: Press button (35-70%)
+            else if (progress < 0.7) {
+              const pressProgress = (progress - 0.35) / 0.35
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${endX}px !important;
+                  top: ${endY + (descendAmount * progress)}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(${1 - (0.15 * Math.max(0, pressProgress))}) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              gsap.set(button, {
+                scale: 1 - (0.04 * Math.max(0, pressProgress)),
+                boxShadow: `0 0 30px rgba(59, 130, 246, ${0.5 + 0.4 * Math.max(0, pressProgress)})`
               })
             }
-          }, 3000)
-        }
-        
-        if (button) {
-          const buttonRect = button.getBoundingClientRect()
-          const descendAmount = 30 // Pixels to descend
-                
-          const tl1 = gsap.timeline({
-            scrollTrigger: {
-              trigger: step1Ref.current,
-              start: 'top 70%',
-              end: 'bottom 30%',
-              scrub: 0.8,
-              onUpdate: (self: any) => {
-                const progress = self.progress
-                const step1Rect = step1Ref.current!.getBoundingClientRect()
-                
-                // Start from outside Step 1 box (top-left area)
-                const startX = step1Rect.left + 100
-                const startY = step1Rect.top + 100
-                
-                // End at button center
-                const endX = buttonRect.left + buttonRect.width / 2 - 18
-                const endY = buttonRect.top + buttonRect.height / 2 - 18
-                
-                console.log('🎯 Cursor positioning setup:', {
-                  step1Rect: {
-                    left: Math.round(step1Rect.left),
-                    top: Math.round(step1Rect.top),
-                    width: Math.round(step1Rect.width),
-                    height: Math.round(step1Rect.height)
-                  },
-                  buttonRect: {
-                    left: Math.round(buttonRect.left),
-                    top: Math.round(buttonRect.top),
-                    width: Math.round(buttonRect.width),
-                    height: Math.round(buttonRect.height)
-                  },
-                  startPosition: { x: Math.round(startX), y: Math.round(startY) },
-                  endPosition: { x: Math.round(endX), y: Math.round(endY) }
-                })
-                
-                // Reset to normal cursor
-                if (progress === 0 && cursorType !== 'normal') {
-                  setCursorType('normal')
-                }
-                
-                if (progress < 0.4) {
-                  // Cursor moves to button with motion blur
-                  const moveProgress = progress / 0.4
-                  const currentX = startX + (endX - startX) * moveProgress
-                  const currentY = startY + (endY - startY) * moveProgress + (descendAmount * progress)
-                  
-                  const blurAmount = moveProgress > 0.1 && moveProgress < 0.9 ? 2 : 0
-                  
-                  gsap.set(cursorRef.current, {
-                    left: currentX,
-                    top: currentY,
-                    opacity: 1,
-                    scale: 1,
-                    filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(${blurAmount}px)`
-                  })
-                  
-                  // Glow starts at 30%
-                  if (progress > 0.3) {
-                    const glowProgress = (progress - 0.3) / 0.1
-                    gsap.set(button, {
-                      boxShadow: `0 0 ${20 * glowProgress}px rgba(59, 130, 246, ${0.5 * glowProgress})`
-                    })
-                  }
-                } else if (progress < 0.7) {
-                  // Pressing phase (starts at 50% - EARLIER!)
-                  const pressProgress = (progress - 0.5) / 0.2
-                  
-                  // Change to pointing cursor at start
-                  if (progress > 0.5 && cursorType !== 'pointing') {
-                    setCursorType('pointing')
-                  }
-                  
-                  gsap.set(cursorRef.current, {
-                    left: endX,
-                    top: endY + (descendAmount * progress),
-                    opacity: 1,
-                    scale: 1 - (0.15 * Math.max(0, pressProgress)),
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(0px)'
-                  })
-                  gsap.set(button, {
-                    scale: 1 - (0.04 * Math.max(0, pressProgress)),
-                    boxShadow: `0 0 30px rgba(59, 130, 246, ${0.5 + 0.4 * Math.max(0, pressProgress)})`
-                  })
-                } else {
-                  // Release and fade
-                  const releaseProgress = (progress - 0.7) / 0.3
-                  
-                  if (releaseProgress > 0 && cursorType !== 'normal') {
-                    setCursorType('normal')
-                  }
-                  
-                  gsap.set(cursorRef.current, {
-                    left: endX,
-                    top: endY + (descendAmount * progress),
-                    opacity: 1 - releaseProgress,
-                    scale: 0.85 + (0.15 * releaseProgress),
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(0px)'
-                  })
-                  gsap.set(button, {
-                    scale: 0.96 + (0.04 * releaseProgress)
-                  })
-                }
-              },
-              onLeave: () => setCursorType('normal'),
-              onLeaveBack: () => {
+            // Phase 3: Release and fade (70-100%)
+            else {
+              const releaseProgress = (progress - 0.7) / 0.3
+              
+              if (releaseProgress > 0 && cursorType !== 'normal') {
                 setCursorType('normal')
-                // Hide cursor when scrolling back up past Step 1
-                if (cursorRef.current) {
-                  gsap.set(cursorRef.current, {
-                    left: -1000,
-                    top: -1000,
-                    opacity: 0,
-                    display: 'none',
-                    visibility: 'hidden'
-                  })
-                }
               }
-            }
-          })
-
-          tl1.to({}, { duration: 1 })
-        }
-      }
-
-      // STEP 2: Cursor moves to text box, changes to text cursor, and types
-      if (step2Ref.current && cursorRef.current && textRef.current) {
-        const box = step2Ref.current.querySelector('.animation-box')
-        const textBox = step2Ref.current.querySelector('.text-input')
-        
-        if (box && textBox) {
-          const tl2 = gsap.timeline({
-            scrollTrigger: {
-              trigger: step2Ref.current,
-              start: 'top 70%',
-              end: 'bottom 30%',
-              scrub: 0.8,
-              onUpdate: (self: any) => {
-                const boxRect = box.getBoundingClientRect()
-                const textBoxRect = textBox.getBoundingClientRect()
-                const progress = self.progress
-                
-                // Calculate positions with descending
-                const startX = boxRect.left + 40
-                const startY = boxRect.top + 40
-                const textStartX = textBoxRect.left + 16
-                const textStartY = textBoxRect.top + 16
-                const descendAmount = 30
-                
-                // Change to text cursor at start
-                if (progress > 0 && cursorType !== 'text') {
-                  setCursorType('text')
-                }
-                
-                if (progress < 0.2) {
-                  // Cursor appears and moves to text box
-                  const moveProgress = progress / 0.2
-                  const currentX = startX + (textStartX - startX) * moveProgress
-                  const currentY = startY + (textStartY - startY) * moveProgress + (descendAmount * progress)
-                  
-                  gsap.set(cursorRef.current, {
-                    left: currentX,
-                    top: currentY,
-                    opacity: 1,
-                    scale: 1
-                  })
-                } else if (progress < 0.9) {
-                  // Typing phase
-                  const typingProgress = (progress - 0.2) / 0.7
-                  const charCount = Math.floor(typingProgress * fullText.length)
-                  setTypedText(fullText.substring(0, charCount))
-                  
-                  // Move cursor with text and add descending
-                  if (textRef.current) {
-                    const textWidth = textRef.current.offsetWidth || 0
-                    gsap.set(cursorRef.current, {
-                      left: textStartX + textWidth + 2,
-                      top: textStartY + (descendAmount * progress),
-                      opacity: 1,
-                      scale: 1
-                    })
-                  }
-                } else {
-                  // Fade out but keep text cursor
-                  const fadeProgress = (progress - 0.9) / 0.1
-                  gsap.set(cursorRef.current, {
-                    opacity: 1 - fadeProgress
-                  })
-                }
-              },
-              onLeave: () => {
-                // Don't change cursor type
-              },
-              onLeaveBack: () => {
-                setCursorType('normal')
-                setTypedText('')
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${endX}px !important;
+                  top: ${endY + (descendAmount * progress)}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: ${1 - releaseProgress} !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(${0.85 + (0.15 * releaseProgress)}) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
               }
+              
+              gsap.set(button, {
+                scale: 0.96 + (0.04 * releaseProgress)
+              })
             }
-          })
-          
-          tl2.to({}, { duration: 1 })
-        }
-      }
-
-      // STEP 3: Cursor moves between options and selects Music
-      if (step3Ref.current && cursorRef.current) {
-        const box = step3Ref.current.querySelector('.animation-box')
-        const scienceCard = step3Ref.current.querySelector('[data-interest="science"]')
-        const musicCard = step3Ref.current.querySelector('[data-interest="music"]')
-        
-        if (box && scienceCard && musicCard) {
-          const tl3 = gsap.timeline({
-            scrollTrigger: {
-              trigger: step3Ref.current,
-              start: 'top 70%',
-              end: 'bottom 30%',
-              scrub: 0.8,
-              onUpdate: (self: any) => {
-                const boxRect = box.getBoundingClientRect()
-                const scienceRect = scienceCard.getBoundingClientRect()
-                const musicRect = musicCard.getBoundingClientRect()
-                const progress = self.progress
-                
-                const startX = boxRect.left + 40
-                const startY = boxRect.top + 40
-                const scienceX = scienceRect.left + scienceRect.width / 2 - 14
-                const scienceY = scienceRect.top + scienceRect.height / 2 - 14
-                const musicX = musicRect.left + musicRect.width / 2 - 14
-                const musicY = musicRect.top + musicRect.height / 2 - 14
-                const descendAmount = 30
-                
-                // Reset to normal cursor at start
-                if (progress === 0 && cursorType !== 'normal') {
-                  setCursorType('normal')
-                }
-                
-                if (progress < 0.3) {
-                  // Move toward Science with motion blur
-                  const moveProgress = progress / 0.3
-                  const currentX = startX + (scienceX - startX) * moveProgress
-                  const currentY = startY + (scienceY - startY) * moveProgress + (descendAmount * progress)
-                  
-                  const blurAmount = moveProgress > 0.1 && moveProgress < 0.9 ? 2 : 0
-                  
-                  gsap.set(cursorRef.current, {
-                    left: currentX,
-                    top: currentY,
-                    opacity: 1,
-                    scale: 1,
-                    filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(${blurAmount}px)`
-                  })
-                } else if (progress < 0.5) {
-                  // Move from Science to Music with motion blur
-                  const moveProgress = (progress - 0.3) / 0.2
-                  const currentX = scienceX + (musicX - scienceX) * moveProgress
-                  const currentY = scienceY + (musicY - scienceY) * moveProgress + (descendAmount * progress)
-                  
-                  const blurAmount = 2
-                  
-                  gsap.set(cursorRef.current, {
-                    left: currentX,
-                    top: currentY,
-                    opacity: 1,
-                    scale: 1,
-                    filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(${blurAmount}px)`
-                  })
-                  
-                  // Start glow at 40%
-                  if (progress > 0.4) {
-                    const glowProgress = (progress - 0.4) / 0.1
-                    gsap.set(musicCard, {
-                      borderColor: `rgba(59, 130, 246, ${glowProgress})`,
-                      boxShadow: `0 0 ${30 * glowProgress}px rgba(59, 130, 246, ${0.6 * glowProgress})`
-                    })
-                  }
-                } else if (progress < 0.7) {
-                  // Pressing phase (starts at 50% - EARLIER!)
-                  const pressProgress = (progress - 0.5) / 0.2
-                  
-                  // Change to pointing cursor at start
-                  if (pressProgress > 0 && cursorType !== 'pointing') {
-                    setCursorType('pointing')
-                  }
-                  
-                  gsap.set(cursorRef.current, {
-                    left: musicX,
-                    top: musicY + (descendAmount * progress),
-                    opacity: 1,
-                    scale: 1 - (0.1 * pressProgress),
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(0px)'
-                  })
-                  gsap.set(musicCard, {
-                    scale: 1 - (0.05 * pressProgress),
-                    backgroundColor: `rgba(59, 130, 246, ${0.15 * pressProgress})`,
-                    borderColor: '#3b82f6',
-                    boxShadow: `0 0 30px rgba(59, 130, 246, ${0.6 + 0.3 * pressProgress})`
-                  })
-                } else {
-                  // Release and fade
-                  const releaseProgress = (progress - 0.7) / 0.3
-                  
-                  if (releaseProgress > 0 && cursorType !== 'normal') {
-                    setCursorType('normal')
-                  }
-                  
-                  gsap.set(cursorRef.current, {
-                    left: musicX,
-                    top: musicY + (descendAmount * progress),
-                    opacity: 1 - releaseProgress,
-                    scale: 0.9 + (0.1 * releaseProgress),
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(0px)'
-                  })
-                  gsap.set(musicCard, {
-                    scale: 0.95 + (0.05 * releaseProgress)
-                  })
-                }
-              },
-              onLeave: () => setCursorType('normal'),
-              onLeaveBack: () => setCursorType('normal')
+          },
+          onLeaveBack: () => {
+            setCursorType('normal')
+            if (cursorRef.current) {
+              cursorRef.current.style.cssText = `
+                position: fixed !important;
+                left: -10000px !important;
+                top: -10000px !important;
+                width: 36px !important;
+                height: 36px !important;
+                opacity: 0 !important;
+                display: none !important;
+                visibility: hidden !important;
+                z-index: 999999 !important;
+                pointer-events: none !important;
+                background-color: transparent !important;
+                border-radius: 0 !important;
+              `
             }
-          })
-          
-          tl3.to({}, { duration: 1 })
-        }
-      }
-
-      // STEP 4: Spinner animation (same as processing component)
-      if (step4Ref.current) {
-        const spinner = step4Ref.current.querySelector('.spinner')
-        
-        if (spinner) {
-          gsap.timeline({
-            scrollTrigger: {
-              trigger: step4Ref.current,
-              start: 'top 70%',
-              end: 'bottom 30%',
-              scrub: 2,
-            }
-          })
-          .to(spinner, {
-            rotation: 720, // Two full rotations
-            duration: 3,
-            ease: 'none'
-          })
-        }
-      }
-
-      // STEP 5: Confetti + cursor clicks download
-      if (step5Ref.current && cursorRef.current) {
-        const box = step5Ref.current.querySelector('.animation-box')
-        const downloadBtn = step5Ref.current.querySelector('[data-download]')
-        const confettiContainer = step5Ref.current.querySelector('.confetti-container')
-        
-        if (box && downloadBtn && confettiContainer) {
-          const tl5 = gsap.timeline({
-            scrollTrigger: {
-              trigger: step5Ref.current,
-              start: 'top 70%',
-              end: 'bottom 30%',
-              scrub: 0.8,
-              onUpdate: (self: any) => {
-                const boxRect = box.getBoundingClientRect()
-                const btnRect = downloadBtn.getBoundingClientRect()
-                const progress = self.progress
-                
-                const startX = boxRect.left + 40
-                const startY = boxRect.top + 40
-                const endX = btnRect.left + btnRect.width / 2 - 14
-                const endY = btnRect.top + btnRect.height / 2 - 14
-                const descendAmount = 30
-                
-                // Animate confetti
-                const confettiElements = confettiContainer.querySelectorAll('.confetti-particle')
-                confettiElements.forEach((particle: any, i: number) => {
-                  const particleProgress = Math.max(0, progress - (i * 0.01))
-                  gsap.set(particle, {
-                    y: particleProgress * 300,
-                    opacity: 1 - particleProgress,
-                    rotation: particleProgress * 360
-                  })
-                })
-                
-                // Reset to normal cursor
-                if (progress === 0 && cursorType !== 'normal') {
-                  setCursorType('normal')
-                }
-                
-                if (progress < 0.4) {
-                  // Cursor moves to button with motion blur
-                  const moveProgress = progress / 0.4
-                  const currentX = startX + (endX - startX) * moveProgress
-                  const currentY = startY + (endY - startY) * moveProgress + (descendAmount * progress)
-                  
-                  const blurAmount = moveProgress > 0.1 && moveProgress < 0.9 ? 2 : 0
-                  
-                  gsap.set(cursorRef.current, {
-                    left: currentX,
-                    top: currentY,
-                    opacity: 1,
-                    scale: 1,
-                    filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(${blurAmount}px)`
-                  })
-                  
-                  // Glow starts at 30%
-                  if (progress > 0.3) {
-                    const glowProgress = (progress - 0.3) / 0.1
-                    gsap.set(downloadBtn, {
-                      boxShadow: `0 0 ${20 * glowProgress}px rgba(59, 130, 246, ${0.5 * glowProgress})`
-                    })
-                  }
-                } else if (progress < 0.7) {
-                  // Pressing phase (starts at 50% - EARLIER!)
-                  const pressProgress = (progress - 0.5) / 0.2
-                  
-                  // Change to pointing cursor at start
-                  if (progress > 0.5 && cursorType !== 'pointing') {
-                    setCursorType('pointing')
-                  }
-                  
-                  gsap.set(cursorRef.current, {
-                    left: endX,
-                    top: endY + (descendAmount * progress),
-                    opacity: 1,
-                    scale: 1 - (0.15 * Math.max(0, pressProgress)),
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(0px)'
-                  })
-                  gsap.set(downloadBtn, {
-                    scale: 1 - (0.04 * Math.max(0, pressProgress)),
-                    boxShadow: `0 0 30px rgba(59, 130, 246, ${0.5 + 0.4 * Math.max(0, pressProgress)})`
-                  })
-                } else {
-                  // Release and fade
-                  const releaseProgress = (progress - 0.7) / 0.3
-                  
-                  if (releaseProgress > 0 && cursorType !== 'normal') {
-                    setCursorType('normal')
-                  }
-                  
-                  gsap.set(cursorRef.current, {
-                    left: endX,
-                    top: endY + (descendAmount * progress),
-                    opacity: 1 - releaseProgress,
-                    scale: 0.85 + (0.15 * releaseProgress),
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5)) blur(0px)'
-                  })
-                  gsap.set(downloadBtn, {
-                    scale: 0.96 + (0.04 * releaseProgress)
-                  })
-                }
-              },
-              onLeave: () => setCursorType('normal'),
-              onLeaveBack: () => setCursorType('normal')
-            }
-          })
-          
-          tl5.to({}, { duration: 1 })
-        }
-      }
-
-      // Fade in animations for steps
-      gsap.utils.toArray('.step-container').forEach((step: any) => {
-        gsap.from(step, {
-          opacity: 0,
-          y: 50,
-          duration: 1,
-          scrollTrigger: {
-            trigger: step,
-            start: 'top 85%',
-            end: 'top 65%',
-            scrub: 1,
           }
         })
-      })
+      }
     }
+
+    // STEP 2: Text Input Animation
+    if (step2Ref.current && cursorRef.current && textRef.current) {
+      const textBox = step2Ref.current.querySelector('.text-input')
+      
+      if (textBox) {
+        ScrollTrigger.create({
+          trigger: step2Ref.current,
+          start: 'top 70%',
+          end: 'bottom 30%',
+          scrub: false, // No scrub for instant 60 FPS
+          onUpdate: (self: any) => {
+            const progress = self.progress
+            const step2Rect = step2Ref.current!.getBoundingClientRect()
+            const textBoxRect = textBox.getBoundingClientRect()
+            
+            const startX = step2Rect.left + 40
+            const startY = step2Rect.top + 40
+            const textStartX = textBoxRect.left + 16
+            const textStartY = textBoxRect.top + 16
+            const descendAmount = 30
+            
+            // Change to text cursor immediately
+            if (progress > 0 && cursorType !== 'text') {
+              setCursorType('text')
+            }
+            
+            // Phase 1: Move to text box (0-20%)
+            if (progress < 0.2) {
+              const moveProgress = progress / 0.2
+              const currentX = startX + (textStartX - startX) * moveProgress
+              const currentY = startY + (textStartY - startY) * moveProgress + (descendAmount * progress)
+              
+              // Change to text cursor immediately when cursor appears
+              if (progress > 0 && cursorType !== 'text') {
+                setCursorType('text')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${currentX}px !important;
+                  top: ${currentY}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(1) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+            }
+            // Phase 2: Typing animation (20-90%)
+            else if (progress < 0.9) {
+              const typingProgress = (progress - 0.2) / 0.7
+              const charCount = Math.floor(typingProgress * fullText.length)
+              setTypedText(fullText.substring(0, charCount))
+              
+              if (textRef.current) {
+                const textWidth = textRef.current.offsetWidth || 0
+                if (cursorRef.current) {
+                  cursorRef.current.style.cssText = `
+                    position: fixed !important;
+                    left: ${textStartX + textWidth + 2}px !important;
+                    top: ${textStartY + (descendAmount * progress)}px !important;
+                    width: 36px !important;
+                    height: 36px !important;
+                    opacity: 1 !important;
+                    display: block !important;
+                    visibility: visible !important;
+                    z-index: 999999 !important;
+                    pointer-events: none !important;
+                    background-color: transparent !important;
+                    border-radius: 0 !important;
+                    transform: scale(1) !important;
+                    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                  `
+                }
+              }
+            }
+            // Phase 3: Fade out (90-100%)
+            else {
+              const fadeProgress = (progress - 0.9) / 0.1
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${textStartX}px !important;
+                  top: ${textStartY}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: ${1 - fadeProgress} !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(1) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+            }
+          },
+          onLeaveBack: () => {
+            setCursorType('normal')
+            setTypedText('')
+          }
+        })
+      }
+    }
+
+    // STEP 3: Interest Selection Animation
+    if (step3Ref.current && cursorRef.current) {
+      const musicCard = step3Ref.current.querySelector('[data-interest="music"]')
+      
+      if (musicCard) {
+        ScrollTrigger.create({
+          trigger: step3Ref.current,
+          start: 'top 70%',
+          end: 'bottom 30%',
+          scrub: false, // No scrub for instant 60 FPS
+          onUpdate: (self: any) => {
+            const progress = self.progress
+            const step3Rect = step3Ref.current!.getBoundingClientRect()
+            const musicRect = musicCard.getBoundingClientRect()
+            
+            const startX = step3Rect.left + 40
+            const startY = step3Rect.top + 40
+            const musicX = musicRect.left + musicRect.width / 2
+            const musicY = musicRect.top + musicRect.height / 2
+            const descendAmount = 30
+            
+            // Reset to normal cursor at start
+            if (progress === 0 && cursorType !== 'normal') {
+              setCursorType('normal')
+            }
+            
+            // Phase 1: Move directly to Music (0-40%)
+            if (progress < 0.4) {
+              const moveProgress = progress / 0.4
+              const currentX = startX + (musicX - startX) * moveProgress
+              const currentY = startY + (musicY - startY) * moveProgress + (descendAmount * progress)
+              
+              // Change to pointing cursor when over Music option (at 30%)
+              if (progress > 0.3 && cursorType !== 'pointing') {
+                setCursorType('pointing')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${currentX}px !important;
+                  top: ${currentY}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(1) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              // Music glow starts at 25%
+              if (progress > 0.25) {
+                const glowProgress = (progress - 0.25) / 0.1
+                gsap.set(musicCard, {
+                  borderColor: `rgba(59, 130, 246, ${glowProgress})`,
+                  boxShadow: `0 0 ${30 * glowProgress}px rgba(59, 130, 246, ${0.6 * glowProgress})`
+                })
+              }
+            }
+            // Phase 2: Select Music (40-70%)
+            else if (progress < 0.7) {
+              const pressProgress = (progress - 0.4) / 0.3
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${musicX}px !important;
+                  top: ${musicY + (descendAmount * progress)}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(${1 - (0.1 * pressProgress)}) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              gsap.set(musicCard, {
+                scale: 1 - (0.05 * pressProgress),
+                backgroundColor: `rgba(59, 130, 246, ${0.15 * pressProgress})`,
+                borderColor: '#3b82f6',
+                boxShadow: `0 0 30px rgba(59, 130, 246, ${0.6 + 0.3 * pressProgress})`
+              })
+            }
+            // Phase 3: Release and fade (70-100%)
+            else {
+              const releaseProgress = (progress - 0.7) / 0.3
+              
+              if (releaseProgress > 0 && cursorType !== 'normal') {
+                setCursorType('normal')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${musicX}px !important;
+                  top: ${musicY + (descendAmount * progress)}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: ${1 - releaseProgress} !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(${0.9 + (0.1 * releaseProgress)}) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              gsap.set(musicCard, {
+                scale: 0.95 + (0.05 * releaseProgress)
+              })
+            }
+          },
+          onLeave: () => setCursorType('normal'),
+          onLeaveBack: () => setCursorType('normal')
+        })
+      }
+    }
+
+    // STEP 4: Processing Spinner Animation
+    if (step4Ref.current) {
+      const spinner = step4Ref.current.querySelector('.spinner')
+      
+      if (spinner) {
+        gsap.to(spinner, {
+          rotation: 720,
+          duration: 3,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: step4Ref.current,
+            start: 'top 70%',
+            end: 'bottom 30%',
+            scrub: false, // No scrub for instant 60 FPS
+          }
+        })
+      }
+    }
+
+    // STEP 5: Download and Confetti Animation
+    if (step5Ref.current && cursorRef.current) {
+      const downloadBtn = step5Ref.current.querySelector('[data-download]')
+      const confettiContainer = step5Ref.current.querySelector('.confetti-container')
+      
+      if (downloadBtn && confettiContainer) {
+        ScrollTrigger.create({
+          trigger: step5Ref.current,
+          start: 'top 70%',
+          end: 'bottom 30%',
+          scrub: false, // No scrub for instant 60 FPS
+          onUpdate: (self: any) => {
+            const progress = self.progress
+            const step5Rect = step5Ref.current!.getBoundingClientRect()
+            const btnRect = downloadBtn.getBoundingClientRect()
+            
+            const startX = step5Rect.left + 40
+            const startY = step5Rect.top + 40
+            const endX = btnRect.left + btnRect.width / 2 - 18 // Center cursor on button (36px/2)
+            const endY = btnRect.top + btnRect.height / 2 - 18 // Center cursor on button (36px/2)
+            const descendAmount = 30
+            
+            // Animate confetti
+            const confettiElements = confettiContainer.querySelectorAll('.confetti-particle')
+            confettiElements.forEach((particle: any, i: number) => {
+              const particleProgress = Math.max(0, progress - (i * 0.01))
+              gsap.set(particle, {
+                y: particleProgress * 300,
+                opacity: 1 - particleProgress,
+                rotation: particleProgress * 360
+              })
+            })
+            
+            // Reset to normal cursor
+            if (progress === 0 && cursorType !== 'normal') {
+              setCursorType('normal')
+            }
+            
+            // Phase 1: Move to download button (0-40%)
+            if (progress < 0.4) {
+              const moveProgress = progress / 0.4
+              const currentX = startX + (endX - startX) * moveProgress
+              const currentY = startY + (endY - startY) * moveProgress + (descendAmount * progress)
+              
+              // Change to pointing cursor when entering download button area (at 20%)
+              if (progress > 0.2 && cursorType !== 'pointing') {
+                setCursorType('pointing')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${currentX}px !important;
+                  top: ${currentY}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(1) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              // Button glow starts at 15%
+              if (progress > 0.15) {
+                const glowProgress = (progress - 0.15) / 0.1
+                gsap.set(downloadBtn, {
+                  boxShadow: `0 0 ${20 * glowProgress}px rgba(59, 130, 246, ${0.5 * glowProgress})`
+                })
+              }
+            }
+            // Phase 2: Press download button (40-70%)
+            else if (progress < 0.7) {
+              const pressProgress = (progress - 0.5) / 0.2
+              
+              if (progress > 0.5 && cursorType !== 'pointing') {
+                setCursorType('pointing')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${endX}px !important;
+                  top: ${endY + (descendAmount * progress)}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: 1 !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(${1 - (0.15 * Math.max(0, pressProgress))}) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              gsap.set(downloadBtn, {
+                scale: 1 - (0.04 * Math.max(0, pressProgress)),
+                boxShadow: `0 0 30px rgba(59, 130, 246, ${0.5 + 0.4 * Math.max(0, pressProgress)})`
+              })
+            }
+            // Phase 3: Release and celebrate (70-100%)
+            else {
+              const releaseProgress = (progress - 0.7) / 0.3
+              
+              if (releaseProgress > 0 && cursorType !== 'normal') {
+                setCursorType('normal')
+              }
+              
+              if (cursorRef.current) {
+                cursorRef.current.style.cssText = `
+                  position: fixed !important;
+                  left: ${endX}px !important;
+                  top: ${endY + (descendAmount * progress)}px !important;
+                  width: 36px !important;
+                  height: 36px !important;
+                  opacity: ${1 - releaseProgress} !important;
+                  display: block !important;
+                  visibility: visible !important;
+                  z-index: 999999 !important;
+                  pointer-events: none !important;
+                  background-color: transparent !important;
+                  border-radius: 0 !important;
+                  transform: scale(${0.85 + (0.15 * releaseProgress)}) !important;
+                  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)) !important;
+                `
+              }
+              
+              gsap.set(downloadBtn, {
+                scale: 0.96 + (0.04 * releaseProgress)
+              })
+            }
+          },
+          onLeave: () => setCursorType('normal'),
+          onLeaveBack: () => setCursorType('normal')
+        })
+      }
+    }
+
+    // Fade in animations for all steps
+    gsap.utils.toArray('.step-container').forEach((step: any) => {
+      gsap.from(step, {
+        opacity: 0,
+        y: 50,
+        duration: 1,
+        scrollTrigger: {
+          trigger: step,
+          start: 'top 85%',
+          end: 'top 65%',
+          scrub: false, // No scrub for instant 60 FPS
+        }
+      })
+    })
+  }
 
     loadGSAP()
 
@@ -669,7 +771,7 @@ export function Landing({ onStart }: LandingProps) {
   return (
       <div className="min-h-screen bg-[#050A18] text-white font-sans selection:bg-blue-500/30 overflow-x-hidden relative">
       <BackgroundGrid />
-      <div className="relative z-10 flex flex-col flex-grow min-h-screen">
+      <div className="relative z-20 flex flex-col flex-grow min-h-screen">
         <div className="flex-grow pb-32">
       
       <div ref={containerRef} className="relative z-10">
@@ -678,17 +780,19 @@ export function Landing({ onStart }: LandingProps) {
         ref={cursorRef}
         className="fixed pointer-events-none"
         style={{ 
-          top: '-10000px', 
-          left: '-10000px',
+          x: '-10000px', 
+          y: '-10000px',
           width: '36px',
           height: '36px',
-          willChange: 'left, top, opacity, transform, filter',
+          willChange: 'x, y, opacity, transform, filter',
           opacity: 0,
           display: 'none',
           visibility: 'hidden',
-          zIndex: 9999,
+          zIndex: 999999,
           filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))',
-          transition: 'filter 0.15s ease'
+          transition: 'filter 0.15s ease',
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',
+          borderRadius: '50%'
         }}
       >
         <img 
@@ -701,16 +805,21 @@ export function Landing({ onStart }: LandingProps) {
             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             imageRendering: 'crisp-edges'
           }}
+          onError={(e) => {
+            console.log('❌ Cursor image failed to load, using fallback')
+            const target = e.target as HTMLImageElement
+            target.style.display = 'none'
+          }}
         />
       </div>
 
       {/* Text Cursor - positioned by GSAP */}
       <div
         ref={textCursorRef}
-        className="fixed w-0.5 h-5 bg-primary pointer-events-none z-[9999]"
+        className="fixed w-0.5 h-5 bg-primary pointer-events-none z-[999999]"
         style={{ 
-          top: '-1000px', 
-          left: '-1000px',
+          x: '-1000px', 
+          y: '-1000px',
           opacity: 0,
           boxShadow: '0 0 4px rgba(59, 130, 246, 0.5)'
         }}
