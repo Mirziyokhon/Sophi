@@ -50,3 +50,28 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+node_modules
+
+# Next.js
+.next/
+out/
+build/
+dist/
+v0-design/out/
+v0-design/.next/
+v0-design/node_modules/
+
+
+# Netlify
+.netlify/
+v0-design/.netlify/
+
+
+# Webpack
+*.hot-update.js
+*.hot-update.json
+*.pack
+
+# Deployment
+*.ps1
+*.sh
