@@ -8,7 +8,7 @@ export function Pricing() {
       name: 'Starter',
       price: '$9',
       period: '/month',
-      description: 'Perfect for trying Rusaldo',
+      description: 'Perfect for trying Sophi',
       features: [
         '5 videos per month',
         'Basic interests',

@@ -19,6 +19,7 @@ export function Processing({ onComplete }: ProcessingProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let isSubscribed = true
     setIsProcessing(true)
     
     const generateVideo = async () => {
@@ -41,7 +42,13 @@ export function Processing({ onComplete }: ProcessingProps) {
           })
         }, 500)
 
-        // Call the API
+        // Call the API only if component is still mounted
+        if (!isSubscribed) {
+          clearInterval(stepInterval)
+          clearInterval(progressInterval)
+          return
+        }
+
         const result = await api.generateVideo({
           extracted_text: extractedContent.text,
           interest_description: selectedInterest,
@@ -50,6 +57,8 @@ export function Processing({ onComplete }: ProcessingProps) {
 
         clearInterval(stepInterval)
         clearInterval(progressInterval)
+        
+        if (!isSubscribed) return
         
         setProgress(100)
         setCurrentStep(steps.length - 1)
@@ -60,6 +69,7 @@ export function Processing({ onComplete }: ProcessingProps) {
         setTimeout(onComplete, 500)
 
       } catch (err) {
+        if (!isSubscribed) return
         setError(err instanceof Error ? err.message : 'Failed to generate video')
         toast.error('Failed to generate video. Please try again.')
         setIsProcessing(false)
@@ -67,6 +77,10 @@ export function Processing({ onComplete }: ProcessingProps) {
     }
 
     generateVideo()
+    
+    return () => {
+      isSubscribed = false
+    }
   }, [extractedContent, selectedInterest, duration, onComplete, setCurrentVideo, setIsProcessing])
 
   return (
@@ -88,9 +102,9 @@ export function Processing({ onComplete }: ProcessingProps) {
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-              className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary border-r-primary"
+              className="absolute inset-0 rounded-full border-4 border-transparent border-t-brand border-r-brand"
             />
-            <div className="absolute inset-2 rounded-full bg-gradient-to-b from-primary/20 to-transparent" />
+            <div className="absolute inset-2 rounded-full bg-gradient-to-b from-brand/20 to-transparent" />
           </div>
         </motion.div>
 
@@ -125,18 +139,18 @@ export function Processing({ onComplete }: ProcessingProps) {
               transition={{ delay: i * 0.1 }}
               className={`flex items-center gap-3 p-3 rounded-lg transition-smooth ${
                 i < currentStep
-                  ? 'bg-primary/20'
+                  ? 'bg-brand/20'
                   : i === currentStep
-                    ? 'bg-primary/10 border border-primary/50'
+                    ? 'bg-brand/10 border border-brand/50'
                     : 'bg-card'
               }`}
             >
               <div
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                   i < currentStep
-                    ? 'bg-primary border-primary'
+                    ? 'bg-brand border-brand'
                     : i === currentStep
-                      ? 'border-primary bg-transparent'
+                      ? 'border-brand bg-transparent'
                       : 'border-border bg-transparent'
                 }`}
               >
@@ -145,7 +159,7 @@ export function Processing({ onComplete }: ProcessingProps) {
                   <motion.div
                     animate={{ scale: [1, 1.2, 1] }}
                     transition={{ duration: 0.6, repeat: Infinity }}
-                    className="w-2 h-2 bg-primary rounded-full"
+                    className="w-2 h-2 bg-brand rounded-full"
                   />
                 )}
               </div>
@@ -166,7 +180,7 @@ export function Processing({ onComplete }: ProcessingProps) {
           <motion.div
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="h-full bg-gradient-to-r from-primary to-accent"
+            className="h-full bg-gradient-to-r from-brand to-brand-muted"
           />
         </motion.div>
       </div>

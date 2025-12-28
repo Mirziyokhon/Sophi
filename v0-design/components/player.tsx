@@ -1,11 +1,10 @@
 'use client'
 
-import { Share2, Share, MessageCircle, Copy, Check, ExternalLink } from 'lucide-react'
+import { Share2, Share, MessageCircle, Copy, Check, ExternalLink, Download } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
 import { api } from '../lib/api'
-import { SketchAnimationPlayer } from './sketch-animation-player'
 
 interface PlayerProps {
   onCreateAnother: () => void
@@ -16,6 +15,7 @@ export function Player({ onCreateAnother }: PlayerProps) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const [showShareMenu, setShowShareMenu] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   if (!currentVideo) {
     return (
@@ -26,6 +26,7 @@ export function Player({ onCreateAnother }: PlayerProps) {
   }
 
   const videoUrl = api.getVideoURL(currentVideo.filename)
+  const isMP4 = currentVideo.media_type === 'video' || currentVideo.filename?.endsWith('.mp4')
 
   const handleCopy = () => {
     navigator.clipboard.writeText(window.location.href)
@@ -41,19 +42,39 @@ export function Player({ onCreateAnother }: PlayerProps) {
       className="flex flex-col items-center px-4 pt-20 pb-16"
     >
       <div className="w-full max-w-4xl space-y-5">
-        {/* Sketch Animation Player */}
+        {/* Video Player */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6 }}
           className="mb-4"
         >
-          <SketchAnimationPlayer
-            animationHtml={currentVideo.animation_html || ''}
-            script={currentVideo.script}
-            duration={currentVideo.duration || 60}
-            filename={currentVideo.filename}
-          />
+          <div className="w-full max-w-4xl mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-4 shadow-2xl">
+            <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                className="w-full h-full"
+                controls
+                autoPlay
+                playsInline
+              >
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            
+            {/* Download Button */}
+            <div className="mt-4 flex justify-center">
+              <a
+                href={videoUrl}
+                download={currentVideo.filename}
+                className="px-6 py-2 bg-white/20 hover:bg-white/30 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download Video
+              </a>
+            </div>
+          </div>
         </motion.div>
 
         {/* Title */}

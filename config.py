@@ -69,6 +69,10 @@ PRESET_INTERESTS = [
     "History & Culture"
 ]
 
+# Testing mode - bypasses all Gemini API calls for development
+# Set to True when rate limited, False for production
+TESTING_MODE = False
+
 # Create necessary directories
 for directory in [UPLOAD_DIR, VIDEO_OUTPUT_DIR, TEMP_DIR]:
     os.makedirs(directory, exist_ok=True)

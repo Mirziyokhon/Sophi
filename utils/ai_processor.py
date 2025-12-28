@@ -2,14 +2,22 @@
 AI processing for content summarization and personalization
 """
 import google.generativeai as genai
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import json
 import time
 import random
 import re
 import textwrap
+import asyncio
+import math
+import base64
+import edge_tts
+from pathlib import Path
 import config
+from moviepy.editor import AudioClip, AudioFileClip, concatenate_audioclips
 from utils.math_glyph_helper import MathGlyphHelper
+from utils.cache_manager import AnimationCache
+from utils.queue_handler import RateLimitHandler
 
 
 class RateLimitError(Exception):
@@ -23,39 +31,96 @@ class AIProcessor:
         if not config.GEMINI_API_KEY:
             raise ValueError("Gemini API key not configured")
         genai.configure(api_key=config.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        # Use Gemini 3 Pro for superior quality and reasoning
+        self.model = genai.GenerativeModel('gemini-3-pro-preview')
+        self.html_model = genai.GenerativeModel('gemini-3-pro-preview')
         try:
             self.math_helper = MathGlyphHelper()
         except Exception:
             self.math_helper = None
+        
+        # Initialize cache and rate limit handler
+        self.cache = AnimationCache()
+        self.rate_limiter = RateLimitHandler()
     
     def _generate_with_retry(self, prompt: str, max_retries: int = 5) -> str:
-        """Call Gemini model with exponential backoff and jitter."""
-        base_wait = 2
-        for attempt in range(max_retries):
-            try:
-                response = self.model.generate_content(prompt)
-                return response.text.strip()
-            except Exception as e:
-                error_str = str(e)
-                is_rate_limit = any(
-                    marker in error_str.lower()
-                    for marker in ["429", "rate limit", "resource exhausted"]
+        """Call Gemini model with exponential backoff using RateLimitHandler."""
+        def _api_call():
+            response = self.model.generate_content(prompt)
+            return response.text.strip()
+        
+        try:
+            return self.rate_limiter.call_with_retry(_api_call, max_retries=max_retries)
+        except Exception as e:
+            error_str = str(e)
+            is_rate_limit = any(
+                marker in error_str.lower()
+                for marker in ["429", "rate limit", "resource exhausted", "quota"]
+            )
+            if is_rate_limit:
+                raise RateLimitError(
+                    f"Rate limit exceeded after {max_retries} retries. Please wait a few minutes and try again."
                 )
-                if not is_rate_limit:
-                    raise
+            raise
 
-                if attempt == max_retries - 1:
-                    raise RateLimitError(
-                        f"Rate limit exceeded after {max_retries} retries. Please wait a few minutes and try again."
-                    )
-
-                wait_time = (base_wait * (2 ** attempt)) + random.uniform(0.5, 1.5)
-                print(
-                    f"⏳ Rate limit hit, waiting {wait_time:.1f} seconds before retry {attempt + 2}/{max_retries}..."
-                )
-                time.sleep(wait_time)
-
+    def _get_mock_processed_content(self, text: str, duration: int) -> Dict:
+        """Return mock processed content for testing without API calls."""
+        print("🧪 MOCK DATA: Generating test content (no Gemini API calls)")
+        
+        # Extract a preview from the input text
+        preview = text[:100] if text else "sample content"
+        
+        return {
+            'summary': f"This educational content explores key concepts from: {preview}... The material covers fundamental principles and practical applications.",
+            'key_points': [
+                "Understanding the core concept and its foundational principles",
+                "Exploring how the concept applies in real-world scenarios",
+                "Examining the relationships between different components",
+                "Identifying practical applications and use cases",
+                "Recognizing common patterns and best practices"
+            ],
+            'script': f"Welcome to this educational video! Today we're exploring an important topic. {preview}... Let's break down these concepts step by step and see how they connect to create a complete understanding.",
+            'takeaway': "The key insight is understanding how these concepts work together to form a cohesive whole. Apply this knowledge to deepen your understanding.",
+            'scene_details': [
+                {
+                    'scene_number': 0,
+                    'start_ratio': 0.0,
+                    'narration': "Let's begin by introducing the main concept.",
+                    'visual_prompt': "Opening scene with title and key visual elements"
+                },
+                {
+                    'scene_number': 1,
+                    'start_ratio': 0.2,
+                    'narration': "Here's how the first principle works in practice.",
+                    'visual_prompt': "Visualization showing the first key concept"
+                },
+                {
+                    'scene_number': 2,
+                    'start_ratio': 0.4,
+                    'narration': "Now let's connect this to the second important idea.",
+                    'visual_prompt': "Diagram showing connections between concepts"
+                },
+                {
+                    'scene_number': 3,
+                    'start_ratio': 0.6,
+                    'narration': "Notice how these elements interact and support each other.",
+                    'visual_prompt': "Interactive visualization of concept relationships"
+                },
+                {
+                    'scene_number': 4,
+                    'start_ratio': 0.8,
+                    'narration': "This brings us to the key insight and practical application.",
+                    'visual_prompt': "Summary scene with main takeaway and call to action"
+                }
+            ],
+            'visual_prompts': [
+                "Hand-drawn sketch illustrating the main concept with clear labels",
+                "Diagram showing step-by-step process flow",
+                "Visualization of relationships between key components",
+                "Summary graphic with key points highlighted"
+            ]
+        }
+    
     def _fallback_interest_profile(self, interest_description: str) -> str:
         # Check if user selected "No Interest" option
         if interest_description.strip() == "No Interest":
@@ -182,6 +247,11 @@ Learning Style: Direct, straightforward explanations using common experiences an
         Returns:
             Enhanced and structured interest profile
         """
+        # TESTING MODE: Return mock profile without API calls
+        if config.TESTING_MODE:
+            print("🧪 TESTING MODE: Using mock interest profile")
+            return f"Mock enhanced profile for: {interest_description}. Core Themes: Educational exploration with practical applications. Learning Style: Interactive and engaging with real-world examples."
+        
         # Check if user selected "No Interest" option
         if interest_description.strip() == "No Interest":
             return """Core Themes: Simple, clear explanations with universal understanding. 
@@ -282,6 +352,9 @@ TAKEAWAY: [memorable conclusion]"""
             print("⚠️ Gemini rate limit for summarization. Using heuristic summary.")
             return self._fallback_summary(text)
         except Exception as e:
+            print(f"⚠️ Full error details: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Error summarizing content: {str(e)}")
     
     def personalize_content(self, summary_data: Dict[str, str], interest_profile: str, target_duration: int) -> Dict[str, list]:
@@ -446,98 +519,821 @@ etc."""
         duration_seconds: int,
         interest_description: str
     ) -> str:
-        """Ask Gemini for the full HTML5 sketch animation application."""
-        scenes = processed_content.get('scene_details') or []
+        """Generate JSON-driven GSAP animation using Gemini 3 Pro - ALWAYS UNIQUE."""
+        
+        import random
+        import uuid
+        from datetime import datetime
+        
+        # Generate unique session ID for this animation (ensures uniqueness)
+        unique_session = str(uuid.uuid4())[:8]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Scribble/sketch variants for consistent style
+        creative_styles = [
+            "scribbled notebook sequences with animated pencil shading and jitter lines",
+            "sketchbook flip-through with marker overlays, ink bleed, and notebook margin doodles",
+            "charcoal + chalk hybrid with rough cross-hatching, textured paper grain, and animated smudges",
+            "blueprint pencil drafts with shaky outlines, animated eraser dust, and paper-tear transitions",
+            "journal collage made of pen sketches, watercolor washes, and animated sticky notes"
+        ]
+        random_style = random.choice(creative_styles)
+        
+        # Random color palette for variety
+        color_palettes = [
+            {"primary": "#6366f1", "secondary": "#f59e0b", "accent": "#10b981"},
+            {"primary": "#ef4444", "secondary": "#3b82f6", "accent": "#fbbf24"},
+            {"primary": "#8b5cf6", "secondary": "#06b6d4", "accent": "#f43f5e"},
+            {"primary": "#059669", "secondary": "#7c3aed", "accent": "#f97316"},
+            {"primary": "#2563eb", "secondary": "#dc2626", "accent": "#16a34a"}
+        ]
+        random_palette = random.choice(color_palettes)
+        
+        print(f"🎨 Creating UNIQUE animation (session: {unique_session}, style: {random_style[:30]}...)")
+        
+        scenes = processed_content.get('scene_details', [])
         script_text = processed_content.get('script', '')
         summary = processed_content.get('summary', '')
         key_points = processed_content.get('key_points', [])
-        math_terms = self._detect_math_expressions(scenes, script_text)
-        math_sprites = {}
-        if self.math_helper and math_terms:
-            try:
-                math_sprites = self.math_helper.generate_glyphs(math_terms)
-            except Exception:
-                math_sprites = {}
-
+        
+        # Prepare content context
         key_point_lines = '\n'.join(f"- {point}" for point in key_points)
         scene_json = json.dumps(scenes[:10], indent=2, ensure_ascii=False)
         truncated_source = textwrap.shorten(original_text or '', width=2000, placeholder=' ...')
-        math_sprite_json = json.dumps(math_sprites, ensure_ascii=False)
+        num_scenes = max(len(scenes), 1)
+        
+        # Define available visual elements
+        visual_elements = """
+SHAPES: createCircle, createSquare, createTriangle, createStar, createHeart, createDiamond, createHexagon
+NUMBERS: createNumber (large standalone numbers), createNumberBadge (numbers in colored circles)
+ICONS: createIcon (lightbulb, star, check, arrow-right, arrow-left, plus, minus, equals, multiply, divide, question, info, book, brain, target, trophy)
+TEXT: createText (labels), createTitle (big headers), createFormula (math equations)
+CONNECTORS: createArrow (directional arrows between points), createLine (solid/dashed lines)
+FIGURES: createStickFigure (people), createAtom (labeled circles)
+EFFECTS: createHighlightBox (colored highlight areas), createParticle (glowing dots)
+"""
+        
+        prompt = f"""# TASK: Generate Complete HTML Animation from Scratch
 
-        advanced_prompt = f"""
-ROLE: You are the "Executive Producer" and "Creative Content Pipeline Manager." Your output MUST be a single, complete HTML5 Sketch Animation application that visually explains the learner's topic. You silently perform the required analysis pipeline but only return the final HTML.
+You are creating a {duration_seconds}-second educational animation by writing HTML, CSS, and JavaScript from scratch.
 
-MANDATORY FOUR-STAGE PIPELINE (complete internally, never print stages):
-• Stage 1 – Foundational Analysis: extract 5-8 essential bullet points from the topic and name the audience/grade level.
-• Stage 2 – Interest & Analogy Mapping: {"if the interest description is 'No Interest', choose simple, everyday analogies and practical applications that anyone can understand. Use common life situations and real-world examples. Otherwise, choose a vivid analogy that aligns with the learner's interest description"} and fuse it with Stage 1 points to form the hook.
-• Stage 3 – Scene Grid: divide the total duration (default {duration_seconds}s unless overridden) into exactly sequential scenes (≈5s each). For every scene craft (a) a narration sentence that flows from previous beats and (b) a VERY THOROUGH visual instruction describing motions, props, and stick-figure poses.
-• Stage 4 – Code Integration: convert the scene grid into the narration array (timestamps + text) and into explicit if/else if blocks inside renderScene(...) so each time window renders unique visuals.
+## SESSION: {unique_session} | {timestamp}
+**IMPORTANT: Create the ENTIRE animation from scratch - no predefined objects!**
 
-CRITICAL SCENE ASSIGNMENT RULES:
-- Each narration line MUST be assigned to exactly one 5-second scene
-- Scene duration = total duration ÷ number of narration lines (minimum 5 seconds per scene)
-- Each scene's visual description MUST be derived from and directly illustrate its assigned narration line
-- Visual descriptions must be EXTREMELY detailed: specify exact positions, colors, movements, transitions, stick-figure poses, and animation timing
+## STYLE LOCK – SKETCHBOOK SCRIBBLE ONLY
+- ALWAYS use hand-drawn pencil/ink strokes with visible jitter and textured paper backgrounds
+- Layer multiple sketch elements (foreground doodles, mid-ground diagrams, background notebook grids)
+- Keep motion continuous: quick pans, snap zooms, parallax page flips
+- Apply pencil shading, cross-hatching, marker bleed, or watercolor splashes for realism
+- Add notebook artifacts (torn edges, sticky notes, taped photos, measurement arrows)
 
-VERY THOROUGH VISUAL DESCRIPTION REQUIREMENTS:
-For each scene, describe:
-1. Opening state (what's visible when scene starts)
-2. Main animation sequence (what moves, appears, or transforms)
-3. Stick-figure actions (idle, thinking, running, pointing, writing, etc.)
-4. Color scheme and visual style for that scene
-5. Specific objects/shapes and their positions
-6. Motion paths and timing (e.g., "moves from left to right over 2 seconds")
-7. Ending state (what's visible when scene ends)
-8. Transitions to next scene
+## CREATIVE DIRECTION
+**Style:** {random_style}
+**Colors:** Primary: {random_palette['primary']}, Secondary: {random_palette['secondary']}, Accent: {random_palette['accent']}
 
-Example of thorough visual description:
-"Scene opens with a stick-figure standing at left in blue color. Over 3 seconds, the stick-figure walks to center while a large green circle grows from small to large at position (400, 200). The stick-figure points at the circle with right arm raised. Yellow particles float upward from bottom to top over 2 seconds. Scene ends with stick-figure at center pointing at the fully grown circle."
+## PACING + CAPTIONS
+- Break narration into micro-beats of 1–3 seconds; no caption stays longer than 3s
+- Keep multiple elements moving simultaneously (scribble reveals, morphing diagrams, bouncing arrows)
+- Highlight important words with animated underlines, circling strokes, or marker highlights
+- Ensure captions in #captions update in lockstep with audio timing metadata you provide
 
-SPECIAL INSTRUCTIONS FOR "NO INTEREST" OPTION:
-If interest description is "No Interest":
-- Use the simplest possible language and explanations
-- Choose analogies from everyday life: cooking, driving, shopping, household chores, weather, nature, school activities
-- Focus on practical applications anyone can understand
-- Avoid technical jargon or specialized knowledge
-- Use common objects and situations everyone experiences
-- Make it universally accessible regardless of background or interests
+## SCENE REALISM
+- Each beat should describe a believable scene (camera angle, lighting, materials, background context)
+- Use props from real life (lab tools, cityscapes, students, chalkboards) drawn in sketch form
+- Add atmospheric motion: drifting paper dust, pulsing energy lines, animated annotations
 
-TECH + QUALITY REQUIREMENTS (non-negotiable):
-1. Paper background (#fffcf5) and 'Patrick Hand' font via Google Fonts.
-2. Implement roughLine(x1,y1,x2,y2,color) with noticeable wobble (use Math.random()*3) and drawStickFigure(x,y,pose,scale,color) supporting idle / thinking / running / pointing / writing poses that match narration verbs.
-3. Canvas must be 1920×1080 and the animation loop must use requestAnimationFrame with a dt accumulator to respect the selected duration precisely.
-4. Provide narration array timestamps from the scene grid so subtitles remain synchronized.
-5. Layout: everything (canvas, subtitles/lyrics, controls, duration slider) must fit inside a single 16:9 frame. Keep subtitles immediately above a compact bottom control strip that includes Play/Pause, a timeline slider, timecode label, duration slider (30–180s, default {duration_seconds}s), and an Export Video button.
-6. Implement Export Video using canvas.captureStream(24) + MediaRecorder to download a .webm file (toggle button text between "Export Video" and "Stop Export").
-7. No external drawing libraries (no rough.js). Only vanilla JS + Canvas.
-8. renderScene(...) must contain explicit conditional windows (if/else if) bound to the scene schedule so the visuals never stall.
-9. Visual design must feel vibrant and diverse—mix lively colors, props, particles, and motion so scenes never degrade into plain squares or static text. Do not print literal headings such as "html" above the canvas.
-10. The animation must be fully functional: subtitles and buttons remain visible, controls respond, and the Export button captures canvas.captureStream(24) so learners get a downloadable .webm.
-11. Return a COMPLETE HTML document beginning with <!DOCTYPE html>. No Markdown fences, comments, or explanations.
-12. Each scene's visual content MUST directly illustrate its assigned narration line - no generic or unrelated visuals.
+## TECHNICAL CAPABILITIES
+You can use ANY of these web technologies:
+- **SVG**: Paths, shapes, morphing, stroke animations
+- **Canvas**: Drawing, gradients, particles, custom graphics
+- **CSS Animations**: Keyframes, transforms, transitions
+- **JavaScript**: GSAP, custom animations, dynamic elements
+- **HTML5**: Semantic structure, accessibility
 
-CONTENT CONTEXT FOR YOUR PIPELINE:
-Interest description: {interest_description}
-Summary: {summary}
-Key points:\n{key_point_lines}
-Scene plan JSON:\n{scene_json}
-Detected math expressions to highlight: {json.dumps(math_terms, ensure_ascii=False)}
-Math glyph sprites (base64 PNG). If empty, ignore. Otherwise declare `const mathGlyphSprites = {math_sprite_json}` and draw them via `ctx.drawImage` when showing equations.
-Original learner input (truncated): {truncated_source}
+---
 
-Silently execute all four stages, then output only the final HTML5 Sketch Animation that satisfies every requirement above.
-        """
+## CONTENT TO ANIMATE (Create HTML/CSS/JS animations based on this)
+**Topic:** {summary}
+**Key Points:**
+{key_point_lines}
+
+**Source:** {truncated_source[:500]}
+
+**User Interest:** {interest_description}
+
+---
+
+## CREATIVE ANIMATION EXAMPLES
+
+### Science/Chemistry:
+```html
+<div class="atom" id="oxygen">
+  <svg viewBox="0 0 200 200">
+    <circle class="nucleus" cx="100" cy="100" r="15"/>
+    <ellipse class="orbit" rx="60" ry="20"/>
+    <circle class="electron" cx="160" cy="100" r="8"/>
+  </svg>
+</div>
+<style>
+.electron {{ animation: orbit 2s linear infinite; }}
+@keyframes orbit {{ from {{ transform: rotate(0deg); }} to {{ transform: rotate(360deg); }} }}
+</style>
+```
+
+### Sports (Football Pitch):
+```html
+<div class="football-field">
+  <svg viewBox="0 0 800 500">
+    <rect class="field" fill="#2d7a2d"/>
+    <line class="pitch-line" x1="400" y1="0" x2="400" y2="500"/>
+    <circle class="center-circle" cx="400" cy="250" r="50"/>
+    <path class="player-trajectory" d="M100,400 Q400,200 700,400"/>
+  </svg>
+</div>
+```
+
+### Math/Geometry:
+```html
+<div class="geometry-demo">
+  <canvas id="triangle-canvas"></canvas>
+  <script>
+    const canvas = document.getElementById('triangle-canvas');
+    const ctx = canvas.getContext('2d');
+    // Draw animated triangle with angle measurements
+  </script>
+</div>
+```
+
+### History/Timeline:
+```html
+<div class="timeline">
+  <div class="era" id="ancient">
+    <div class="era-marker"></div>
+    <div class="era-content">Ancient Times</div>
+  </div>
+</div>
+```
+
+---
+
+## HTML STRUCTURE TEMPLATE
+
+Use this structure as a starting point:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Educational Animation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body {{ margin: 0; padding: 0; background: #f0f0f0; font-family: Arial, sans-serif; }}
+        #animation-container {{ width: 1920px; height: 1080px; position: relative; }}
+        #stage {{ width: 100%; height: 800px; position: relative; }}
+        #captions {{ height: 280px; background: white; display: flex; align-items: center; justify-content: center; font-size: 32px; text-align: center; }}
+        
+        /* YOUR CUSTOM STYLES HERE */
+    </style>
+</head>
+<body>
+    <div id="animation-container">
+        <div id="stage">
+            <!-- YOUR ANIMATION ELEMENTS HERE -->
+        </div>
+        <div id="captions">Ready to start...</div>
+    </div>
+
+    <script>
+        // YOUR ANIMATION LOGIC HERE
+        const timeline = gsap.timeline();
+        
+        function startAnimation() {{
+            // Animation sequence
+        }}
+        
+        // Auto-start
+        window.onload = startAnimation;
+    </script>
+</body>
+</html>
+```
+
+---
+
+## OUTPUT REQUIREMENTS
+
+1. **Complete HTML Document** - Include DOCTYPE, head, body, everything
+2. **Creative Animations** - Use SVG paths, canvas, CSS keyframes, GSAP
+3. **Unique Visual Metaphors** - Don't use standard shapes unless creatively modified
+4. **GSAP Timeline** - Use GSAP for smooth animations and timing
+5. **Captions** - Update #captions div with narration text throughout the animation
+6. **Duration** - CRITICAL: Animation MUST last exactly {duration_seconds} seconds. Spread timeline events evenly across the full duration.
+7. **Responsive** - Elements should be positioned absolutely within the stage
+8. **Caption Text Array** - MUST include a JavaScript array named 'texts' or 'captions' with all narration text for TTS generation
+9. **SMOOTH CONCLUSION** - CRITICAL: Animation MUST have a proper ending sequence:
+   - Reserve last 3-5 seconds for conclusion
+   - Add final summary caption or key takeaway message
+   - Smoothly fade out or zoom out elements
+   - Include visual closure (e.g., fade to black, final title card, or elegant transition)
+   - DO NOT end abruptly - animations should feel complete and polished
+
+## TECHNICAL GUIDELINES
+
+- Use absolute positioning for all animated elements
+- Create smooth transitions and transformations
+- Add visual interest with gradients, shadows, and effects
+- Include hover states or micro-interactions if appropriate
+- Use semantic HTML5 elements
+- Add comments explaining complex animations
+- Test for performance - avoid too many simultaneous animations
+- **Ending Sequence**: Last 10-15% of timeline should be dedicated to wrapping up gracefully
+- Use fade-outs, scale-downs, or elegant transitions for final moments
+- Consider adding a "Thank you for watching" or summary message at the end
+
+Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdown, no explanations - just the HTML code.
+"""
 
         try:
-            html = self._generate_with_retry(advanced_prompt)
-            html = self._strip_code_fences(html)
-            if "<!DOCTYPE html" not in html:
-                raise ValueError("Gemini did not return HTML")
+            print(f"🎨 Generating JSON animation timeline with Gemini 3 Pro...")
+            
+            # Try Gemini 3 Pro first, fall back to 2.0 Flash if not available
+            model_options = ['gemini-3-pro-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-pro']
+            json_data = None
+            last_error = None
+            
+            for model_name in model_options:
+                try:
+                    print(f"   Trying model: {model_name}")
+                    json_model = genai.GenerativeModel(
+                        model_name,
+                        generation_config={
+                            "temperature": 1.0,  # Balanced creativity
+                            "top_p": 0.95,
+                            "top_k": 64
+                        }
+                    )
+                    
+                    response = json_model.generate_content(prompt)
+                    json_data = response.text.strip()
+                    print(f"   ✅ Model {model_name} responded successfully")
+                    break
+                except Exception as model_error:
+                    print(f"   ❌ Model {model_name} failed: {model_error}")
+                    last_error = model_error
+                    continue
+            
+            if json_data is None:
+                raise Exception(f"All models failed. Last error: {last_error}")
+            
+            # Clean up response - remove markdown code blocks if present
+            if json_data.startswith("```html"):
+                json_data = json_data[7:]
+            if json_data.startswith("```json"):
+                json_data = json_data[7:]
+            if json_data.startswith("```"):
+                json_data = json_data[3:]
+            if json_data.endswith("```"):
+                json_data = json_data[:-3]
+            json_data = json_data.strip()
+            
+            # Check if response is complete HTML or JSON
+            if json_data.startswith("<!DOCTYPE html") or json_data.startswith("<html"):
+                # Full HTML generation - extract captions and add TTS audio
+                print(f"✅ Generated complete HTML animation from scratch")
+                
+                # Extract caption texts from HTML for TTS generation
+                import re
+                caption_texts = []
+                
+                # Try to find text content in various formats
+                text_patterns = [
+                    r'texts\s*=\s*\[(.*?)\]',  # texts = ["...", "..."]
+                    r'captions\s*=\s*\[(.*?)\]',  # captions = ["...", "..."]
+                    r'updateCaption\([^)]*\)',  # updateCaption calls
+                ]
+                
+                for pattern in text_patterns:
+                    matches = re.findall(pattern, json_data, re.DOTALL)
+                    if matches:
+                        # Extract quoted strings
+                        quoted_strings = re.findall(r'"([^"]+)"', matches[0])
+                        caption_texts.extend(quoted_strings)
+                        break
+                
+                # Clean up HTML tags from captions
+                cleaned_captions = []
+                for text in caption_texts:
+                    # Remove HTML tags
+                    clean_text = re.sub(r'<[^>]+>', '', text)
+                    # Remove extra whitespace
+                    clean_text = ' '.join(clean_text.split())
+                    if clean_text:
+                        cleaned_captions.append(clean_text)
+                
+                # Generate TTS audio if captions found
+                audio_data_uri = None
+                if cleaned_captions:
+                    try:
+                        print(f"   Extracted {len(cleaned_captions)} captions for TTS")
+                        audio_output_path = Path(config.TEMP_DIR) / f"narration_{int(time.time())}.mp3"
+                        audio_output_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        # Create evenly spaced timeline events across requested duration
+                        if duration_seconds <= 0:
+                            duration_seconds = 90
+                        spacing = max(1.5, duration_seconds / max(1, len(cleaned_captions)))
+                        timeline_events = [
+                            {
+                                "text": text,
+                                "start": round(idx * spacing, 2),
+                                "duration": spacing
+                            }
+                            for idx, text in enumerate(cleaned_captions)
+                        ]
+                        
+                        audio_data_uri = self._generate_timeline_narration(
+                            timeline_events,
+                            audio_output_path,
+                            duration_seconds
+                        )
+                        
+                        if audio_output_path.exists():
+                            audio_output_path.unlink()
+                        
+                        extra_injections = []
+                        if audio_data_uri:
+                            audio_element = f'<audio id="narrationAudio" src="{audio_data_uri}" preload="auto"></audio>'
+                            extra_injections.append(audio_element)
+                            print(f"   ✅ TTS audio embedded in HTML")
+                        
+                        caption_script = self._build_caption_sync_script(timeline_events)
+                        if caption_script:
+                            extra_injections.append(caption_script)
+                        
+                        if extra_injections:
+                            injection_block = '\n'.join(extra_injections)
+                            json_data = json_data.replace('</body>', f'{injection_block}\n</body>')
+                    except Exception as e:
+                        print(f"   ⚠️ TTS generation failed: {e}")
+                else:
+                    print(f"   ⚠️ No captions found in HTML for TTS generation")
+                
+                return json_data
+            
+            # Otherwise, treat as JSON for template-based generation (fallback)
+            print(f"   Response is JSON format, using template-based generation")
+            scene_data = json.loads(json_data)
+            if "setup" not in scene_data or "timeline" not in scene_data:
+                raise ValueError("Invalid JSON structure: missing setup or timeline")
+            
+            # Validate ID integrity
+            setup_ids = set()
+            for setup_action in scene_data.get('setup', []):
+                if 'params' in setup_action and len(setup_action['params']) > 0:
+                    setup_ids.add(setup_action['params'][0])
+            
+            missing_ids = []
+            for timeline_event in scene_data.get('timeline', []):
+                for id_field in ['target', 'from', 'to']:
+                    if id_field in timeline_event:
+                        ref_id = timeline_event[id_field]
+                        if ref_id and ref_id not in setup_ids:
+                            missing_ids.append(f"{id_field}='{ref_id}' at t={timeline_event.get('t', '?')}")
+            
+            if missing_ids:
+                error_msg = f"ID validation failed: {', '.join(missing_ids[:3])} not found in setup"
+                print(f"⚠️ {error_msg}")
+                print(f"   Available IDs: {setup_ids}")
+                raise ValueError(error_msg)
+            
+            print(f"✅ Generated animation with {len(scene_data.get('setup', []))} setup actions and {len(scene_data.get('timeline', []))} timeline events")
+            print(f"   Setup IDs: {setup_ids}")
+            
+            # Generate TTS narration from timeline captions
+            audio_data_uri = None
+            try:
+                audio_output_path = Path(config.TEMP_DIR) / f"narration_{int(time.time())}.mp3"
+                audio_output_path.parent.mkdir(parents=True, exist_ok=True)
+                audio_data_uri = self._generate_timeline_narration(
+                    scene_data.get('timeline', []), 
+                    audio_output_path,
+                    duration_seconds
+                )
+                if audio_output_path.exists():
+                    audio_output_path.unlink()
+            except Exception as e:
+                print(f"⚠️ TTS generation skipped: {e}")
+            
+            # Load GSAP template and inject JSON
+            template_path = "utils/animation_engine_template.html"
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    html_template = f.read()
+            except FileNotFoundError:
+                print(f"⚠️ Template not found at {template_path}, using fallback")
+                return self._build_fallback_html(processed_content, duration_seconds)
+            
+            # Inject JSON data and audio into template
+            safe_json = json.dumps(scene_data, ensure_ascii=False, indent=2)
+            html = html_template.replace('{{SCENE_DATA_JSON}}', safe_json)
+            
+            if audio_data_uri:
+                html = html.replace('{{AUDIO_DATA_URI}}', audio_data_uri)
+                print(f"✅ Generated JSON-driven GSAP animation with TTS narration")
+            else:
+                html = html.replace('{{AUDIO_DATA_URI}}', '')
+                print(f"✅ Generated JSON-driven GSAP animation (no audio)")
+            
+            print(f"✅ Unique animation generated (no caching - fresh every time)")
+            
             return html
+            
         except Exception as e:
-            print(f"⚠️ Gemini HTML generation failed: {e}")
+            import traceback
+            print(f"⚠️ JSON animation generation failed: {e}")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Full traceback:")
+            traceback.print_exc()
+            print(f"   Falling back to simple HTML animation...")
             return self._build_fallback_html(processed_content, duration_seconds)
 
+    def _generate_timeline_narration(self, timeline_events: list, output_path: Path, target_duration: int = 60) -> Optional[str]:
+        """Generate synchronized TTS audio from timeline captions and return base64 data URI."""
+        try:
+            # Combine all timeline text into a single narration script
+            narration_segments = []
+            for event in timeline_events:
+                text = event.get('text', '').strip()
+                if text:
+                    narration_segments.append(text)
+            
+            if not narration_segments:
+                print("⚠️ No narration text found in timeline")
+                return None
+            
+            full_script = ' '.join(narration_segments)
+            print(f"🎤 Generating TTS narration ({len(full_script)} chars)...")
+            
+            # Use Edge-TTS to generate audio - English US Male voice
+            voice = "en-US-GuyNeural"  # Clear English US Male voice
+            
+            async def _synthesize():
+                await self._stream_tts_to_file(full_script, voice, output_path)
+            
+            # Run async TTS generation
+            self._run_async_task(_synthesize)
+            
+            # Ensure audio reaches target duration by padding if needed
+            if output_path.exists():
+                self._extend_audio_duration(output_path, target_duration)
+            
+            # Verify file was created
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                print("⚠️ TTS generation failed or produced empty file")
+                return None
+            
+            # Read audio file and convert to base64 data URI
+            with open(output_path, 'rb') as f:
+                audio_bytes = f.read()
+            
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+            data_uri = f"data:audio/mpeg;base64,{audio_base64}"
+            
+            print(f"✅ TTS narration generated ({len(audio_bytes)} bytes)")
+            return data_uri
+            
+        except Exception as e:
+            print(f"⚠️ TTS generation failed: {e}")
+            return None
+    
+    async def _stream_tts_to_file(
+        self,
+        script: str,
+        voice: str,
+        output_path: Path,
+        rate: Optional[str] = None
+    ) -> None:
+        """Stream Edge-TTS audio chunks directly to disk to avoid buffering entire files."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        kwargs = {"text": script, "voice": voice}
+        if rate:
+            kwargs["rate"] = rate
+        
+        communicate = edge_tts.Communicate(**kwargs)
+        try:
+            with open(output_path, "wb") as audio_file:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_file.write(chunk["data"])
+        except Exception:
+            if output_path.exists():
+                output_path.unlink()
+            raise
+    
+    def _extend_audio_duration(self, audio_path: Path, target_duration: int) -> bool:
+        """Extend audio duration by adding silence or repeating content if needed."""
+        try:
+            # Load the generated audio
+            audio = AudioFileClip(str(audio_path))
+            actual_duration = audio.duration
+            
+            print(f"   [AUDIO] Actual duration: {actual_duration:.1f}s, Target: {target_duration}s")
+            
+            if actual_duration >= target_duration:
+                print(f"   [AUDIO] Duration is sufficient, no extension needed")
+                audio.close()
+                return True
+            
+            # Calculate how much silence we need to add
+            silence_needed = target_duration - actual_duration
+            print(f"   [AUDIO] Adding {silence_needed:.1f}s of silence to reach target duration")
+            
+            # Create silence clip
+            def make_silence(t):
+                return 0
+            
+            silence_clip = AudioClip(make_silence, duration=silence_needed, fps=44100)
+            
+            # Concatenate original audio with silence
+            extended_audio = concatenate_audioclips([audio, silence_clip])
+            
+            # Save the extended audio
+            temp_path = audio_path.parent / f"extended_{audio_path.name}"
+            extended_audio.write_audiofile(str(temp_path), verbose=False, logger=None)
+            
+            # Replace original file
+            audio_path.unlink()
+            temp_path.rename(audio_path)
+            
+            # Clean up
+            extended_audio.close()
+            audio.close()
+            silence_clip.close()
+            
+            print(f"   [AUDIO] Successfully extended audio to {target_duration}s")
+            return True
+            
+        except Exception as e:
+            print(f"   [AUDIO] Failed to extend audio: {e}")
+            return False
+
+    def _explode_caption_text(self, captions: List[str]) -> List[str]:
+        """Break longer caption entries into shorter, high-energy phrases."""
+        expanded: List[str] = []
+        sentence_pattern = re.compile(r'[^.!?]+[.!?]?')
+        
+        for raw in captions or []:
+            text = (raw or "").strip()
+            if not text:
+                continue
+            
+            if len(text) <= 110:
+                expanded.append(text)
+                continue
+            
+            segments = sentence_pattern.findall(text) or [text]
+            for segment in segments:
+                cleaned = segment.strip(" -–•·")
+                if not cleaned:
+                    continue
+                if len(cleaned) > 120:
+                    wrapped = textwrap.wrap(
+                        cleaned,
+                        width=65,
+                        break_long_words=False,
+                        break_on_hyphen=False
+                    )
+                    for chunk in wrapped:
+                        chunk = chunk.strip(" -–•·")
+                        if chunk:
+                            expanded.append(chunk)
+                else:
+                    expanded.append(cleaned)
+        
+        fallbacks = [c.strip() for c in captions or [] if c and c.strip()]
+        return (expanded[:30]) if expanded else fallbacks
+
+    def _build_caption_timeline(self, captions: List[str], duration_seconds: int) -> List[Dict[str, float]]:
+        """Create pacing metadata for captions so audio + subtitles stay energetic."""
+        expanded = self._explode_caption_text(captions)
+        if not expanded:
+            return []
+        
+        words_per_second = 2.9  # Faster cadence for high-energy narration
+        events: List[Dict[str, float]] = []
+        current_time = 0.0
+        
+        for text in expanded:
+            word_count = max(1, len(re.findall(r'\w+', text)))
+            estimated = word_count / words_per_second + 0.35
+            duration = max(1.1, min(4.0, estimated))
+            events.append({
+                "text": text,
+                "start": round(current_time, 3),
+                "duration": round(duration, 3)
+            })
+            current_time += duration
+        
+        if current_time <= 0:
+            return events
+        
+        max_allowed = max(5.0, (duration_seconds or 60) - 0.5)
+        if current_time > max_allowed:
+            scale = max_allowed / current_time
+            adjusted_time = 0.0
+            for event in events:
+                duration = max(0.9, round(event["duration"] * scale, 3))
+                event["duration"] = duration
+                event["start"] = round(adjusted_time, 3)
+                adjusted_time += duration
+        
+        # Prevent overshooting the requested duration
+        for event in events:
+            end_time = event["start"] + event["duration"]
+            if end_time > max_allowed:
+                event["duration"] = max(0.8, round(max_allowed - event["start"], 3))
+        
+        return events
+
+    def _normalize_timeline_events(self, timeline_events: list, duration_seconds: int) -> List[Dict[str, float]]:
+        """Ensure timeline entries contain usable timing metadata."""
+        sanitized: List[Dict[str, float]] = []
+        missing_timing = False
+        
+        for event in timeline_events or []:
+            text = (event.get('text') or event.get('caption') or '').strip()
+            if not text:
+                continue
+            
+            start = event.get('start', event.get('t', event.get('time')))
+            duration = event.get('duration', event.get('len', event.get('length')))
+            
+            try:
+                start_val = float(start)
+                duration_val = float(duration)
+            except (TypeError, ValueError):
+                missing_timing = True
+                start_val = 0.0
+                duration_val = 0.0
+            
+            sanitized.append({
+                "text": text,
+                "start": start_val,
+                "duration": duration_val
+            })
+            
+            if duration_val <= 0:
+                missing_timing = True
+        
+        if not sanitized:
+            return []
+        
+        if missing_timing:
+            return self._build_caption_timeline(
+                [item["text"] for item in sanitized],
+                duration_seconds
+            )
+        
+        sanitized.sort(key=lambda item: item["start"])
+        max_allowed = max(5.0, (duration_seconds or 60) - 0.5)
+        for item in sanitized:
+            if item["duration"] <= 0:
+                item["duration"] = 1.0
+            if item["start"] + item["duration"] > max_allowed:
+                item["duration"] = max(0.7, max_allowed - item["start"])
+        return sanitized
+
+    def _build_caption_sync_script(self, timeline_events: list) -> str:
+        """Create a JS helper that keeps captions synced with optional audio playback."""
+        if not timeline_events:
+            return ""
+
+        sanitized_events = []
+        fallback_spacing = 3.5
+        for idx, event in enumerate(timeline_events):
+            text = (event.get('text') or '').strip()
+            if not text:
+                continue
+            try:
+                start = float(event.get('start', idx * fallback_spacing))
+            except (TypeError, ValueError):
+                start = idx * fallback_spacing
+            try:
+                duration = float(event.get('duration', fallback_spacing))
+            except (TypeError, ValueError):
+                duration = fallback_spacing
+            sanitized_events.append({
+                "start": max(0.0, start),
+                "duration": max(0.5, duration),
+                "text": text
+            })
+
+        if not sanitized_events:
+            return ""
+
+        events_json = json.dumps(sanitized_events, ensure_ascii=False)
+        script = f"""
+<script>
+(function() {{
+    const captionEvents = {events_json};
+    const captionEl = document.getElementById('captions') || document.getElementById('subtitles');
+    if (!captionEl || !captionEvents.length) return;
+
+    const audioEl = document.getElementById('narrationAudio');
+    let timers = [];
+
+    const setCaption = (text) => {{
+        captionEl.textContent = text;
+    }};
+
+    const clearTimers = () => {{
+        timers.forEach(id => clearTimeout(id));
+        timers = [];
+    }};
+
+    const scheduleFrom = (offsetSeconds = 0) => {{
+        clearTimers();
+        captionEvents.forEach(event => {{
+            const delay = Math.max(0, (event.start - offsetSeconds) * 1000);
+            timers.push(setTimeout(() => setCaption(event.text), delay));
+        }});
+    }};
+
+    const handlePlay = () => {{
+        const current = audioEl ? audioEl.currentTime : 0;
+        scheduleFrom(current);
+    }};
+
+    const handlePause = () => clearTimers();
+
+    if (audioEl) {{
+        audioEl.addEventListener('play', handlePlay);
+        audioEl.addEventListener('seeked', handlePlay);
+        audioEl.addEventListener('ratechange', handlePlay);
+        audioEl.addEventListener('pause', handlePause);
+    }} else {{
+        window.addEventListener('load', () => scheduleFrom(0));
+    }}
+
+    window.__restartCaptionSync = () => {{
+        if (audioEl) {{
+            handlePlay();
+        }} else {{
+            scheduleFrom(0);
+        }}
+    }};
+
+    if (document.readyState === 'complete') {{
+        handlePlay();
+    }} else {{
+        window.addEventListener('load', handlePlay);
+    }}
+}})();
+</script>"""
+        return script.strip()
+
+    def _run_async_task(self, coro_factory, timeout: int = 300):
+        """Run async task in sync context, handling event loop properly.
+
+        Longer TTS syntheses (2-3 minute scripts) can easily exceed 60s, so we
+        allow a generous timeout (default 5 minutes) and let callers override if
+        needed.
+        """
+        async def runner():
+            await coro_factory()
+
+        
+        try:
+            loop = asyncio.get_running_loop()
+            # We're in FastAPI context with a running loop, use thread pool
+            import concurrent.futures
+            exception_box = []
+            
+            def thread_target():
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    new_loop.run_until_complete(runner())
+                    new_loop.close()
+                except Exception as e:
+                    exception_box.append(e)
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(thread_target)
+                future.result(timeout=timeout)
+            
+            if exception_box:
+                raise exception_box[0]
+        except RuntimeError:
+            # No event loop exists, create one
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                new_loop.run_until_complete(runner())
+            finally:
+                new_loop.close()
+    
     def _detect_math_expressions(self, scenes: list, script_text: str) -> list[str]:
         """Extract simple math-like expressions for optional highlighting."""
         candidates = []
@@ -732,13 +1528,13 @@ Silently execute all four stages, then output only the final HTML5 Sketch Animat
     const durationLabel = document.getElementById('durationLabel');
 
     function buildNarration(duration) {{
-      return scenePlan.map(scene => ({ t: Number((scene.start_ratio * duration).toFixed(2)), text: scene.narration }));
+      return scenePlan.map(scene => ({{ t: Number((scene.start_ratio * duration).toFixed(2)), text: scene.narration }}));
     }}
 
     function formatTime(seconds) {{
       const mins = Math.floor(seconds / 60);
       const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
-      return `${{mins}}:${{secs}}`;
+      return `${{{{mins}}}}:${{{{secs}}}}`;
     }}
 
     function roughLine(x1, y1, x2, y2, color = '#333') {{
@@ -793,7 +1589,7 @@ Silently execute all four stages, then output only the final HTML5 Sketch Animat
       drawStickFigure(baseX, baseY, pose, 1 + progress * 0.3);
       roughLine(80, 360, 720, 360, '#555');
       roughLine(80, 220 + Math.sin(progress * Math.PI * 2) * 80, 720, 260, '#c0392b');
-      sceneLabel.textContent = `Scene ${active.id}`;
+      sceneLabel.textContent = `Scene ${{active.id}}`;
     }}
 
     let isPlaying = true;
@@ -805,7 +1601,7 @@ Silently execute all four stages, then output only the final HTML5 Sketch Animat
     function updateUI() {{
       const activeLine = narration.reduce((line, entry) => entry.t <= currentTime ? entry.text : line, narration[0]?.text || '');
       subtitleBox.textContent = activeLine || '…';
-      timeDisplay.textContent = `${{formatTime(currentTime)}} / ${{formatTime(totalDuration)}}`;
+      timeDisplay.textContent = `${{{{formatTime(currentTime)}}}} / ${{{{formatTime(totalDuration)}}}}`;
       scrubber.value = currentTime.toFixed(2); // Sync scrubber to currentTime
     }}
     function loop(timestamp) {{
@@ -848,7 +1644,7 @@ Silently execute all four stages, then output only the final HTML5 Sketch Animat
 
     durationSlider.addEventListener('input', (event) => {{
       totalDuration = parseInt(event.target.value, 10);
-      durationLabel.textContent = `${{totalDuration}}s`;
+      durationLabel.textContent = `${{{{totalDuration}}}}s`;
       narration = buildNarration(totalDuration);
       currentTime = Math.min(currentTime, totalDuration);
       scrubber.max = totalDuration;
@@ -937,6 +1733,12 @@ Silently execute all four stages, then output only the final HTML5 Sketch Animat
 
     def process_content(self, text: str, interest_profile: str, target_duration: int) -> Dict:
         """Process and personalize content for downstream animation generation."""
+        
+        # TESTING MODE: Return mock data without API calls
+        if config.TESTING_MODE:
+            print("🧪 TESTING MODE: Using mock processed content (no Gemini API calls)")
+            return self._get_mock_processed_content(text, target_duration)
+        
         summary_data = self.summarize_content(text, target_duration)
         script_bundle = self.personalize_content(summary_data, interest_profile, target_duration)
         script_text = script_bundle.get('script', '')

@@ -21,6 +21,7 @@ import numpy as np
 import requests
 from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips
 import edge_tts
+from elevenlabs.client import ElevenLabs
 
 import config
 
@@ -34,7 +35,7 @@ GLOBAL_STYLE_SUFFIX = (
     "minimalist, hand-drawn, unpolished, scribble style, high contrast, "
     "no shading, stick figure aesthetic"
 )
-DEFAULT_VOICE = "en-US-ChristopherNeural"
+DEFAULT_VOICE = "en-US-AndrewMultilingualNeural"
 
 
 @dataclass
@@ -56,6 +57,15 @@ class SketchAnimator:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.voice = voice
         self.max_wiggle_shift = 18  # pixels
+        
+        # Initialize ElevenLabs client if API key is available
+        self.elevenlabs_client = None
+        if config.ELEVENLABS_API_KEY:
+            try:
+                self.elevenlabs_client = ElevenLabs(api_key=config.ELEVENLABS_API_KEY)
+                logger.info("✅ ElevenLabs TTS initialized")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize ElevenLabs: {e}")
 
     # ------------------------------------------------------------------
     # Media generation helpers
@@ -82,14 +92,78 @@ class SketchAnimator:
         return output_path
 
     def generate_narration(self, text: str, output_path: Path) -> Path:
-        """Generate narration audio using Edge-TTS (free)."""
+        """Generate narration audio using ElevenLabs (primary) or Edge-TTS (fallback)."""
+        
+        # Try ElevenLabs first if available
+        if self.elevenlabs_client:
+            try:
+                logger.info("🎤 Generating narration with ElevenLabs...")
+                audio_generator = self.elevenlabs_client.text_to_speech.convert(
+                    text=text,
+                    voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel voice
+                    model_id="eleven_monolingual_v1",
+                    output_format="mp3_44100_128"
+                )
+                
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, "wb") as f:
+                    for chunk in audio_generator:
+                        if chunk:
+                            f.write(chunk)
+                
+                # Verify file generation
+                if output_path.exists() and output_path.stat().st_size > 0:
+                    logger.info("✅ ElevenLabs narration generated successfully")
+                    return output_path
+                else:
+                    logger.warning("⚠️ ElevenLabs generated empty file, falling back to Edge-TTS")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ ElevenLabs failed: {e}, falling back to Edge-TTS")
+        
+        # Fallback to Edge-TTS with retry logic
+        logger.info("🎤 Generating narration with Edge-TTS (free fallback)...")
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                async def _synthesize() -> None:
+                    communicate = edge_tts.Communicate(text, self.voice)
+                    await communicate.save(str(output_path))
 
-        async def _synthesize() -> None:
-            communicate = edge_tts.Communicate(text, self.voice)
-            await communicate.save(str(output_path))
-
-        self._run_async_task(_synthesize)
-        return output_path
+                self._run_async_task(_synthesize)
+                
+                # Verify file generation
+                if not output_path.exists():
+                    raise RuntimeError(f"Failed to generate narration file: {output_path}")
+                
+                if output_path.stat().st_size == 0:
+                    raise RuntimeError(f"Generated narration file is empty: {output_path}")
+                
+                logger.info("✅ Edge-TTS narration generated successfully")
+                
+                # Add delay between TTS calls to prevent rate limiting
+                if attempt == 0:  # Only delay on first successful attempt
+                    time.sleep(2)  # 2 second delay between narrations
+                
+                return output_path
+                
+            except Exception as e:
+                error_msg = str(e)
+                if "403" in error_msg or "Invalid response status" in error_msg:
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 3  # 3, 6, 9 seconds
+                        logger.warning(f"⚠️ Edge-TTS rate limited (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(f"❌ Edge-TTS failed after {max_retries} attempts: {error_msg}")
+                        raise RuntimeError(f"Edge-TTS service unavailable after {max_retries} retries. Microsoft may be blocking requests. Please try again later.")
+                else:
+                    # Non-403 error, raise immediately
+                    raise
+        
+        raise RuntimeError("Failed to generate narration after all retries")
 
     def create_video(self, segments: List[SketchSegment], output_path: Path) -> Path:
         """Combine segment media into a single MP4 video."""
@@ -230,6 +304,7 @@ class SketchAnimator:
                 segment = SketchSegment(narration=narration, visual_prompt=prompt)
 
             scene_dir = self.temp_dir / f"scene_{timestamp}_{idx:02d}"
+            scene_dir.mkdir(parents=True, exist_ok=True)
             audio_path = scene_dir / "narration.mp3"
             image_path = scene_dir / "sketch.png"
 
@@ -290,22 +365,43 @@ class SketchAnimator:
             await coro_factory()
 
         try:
-            asyncio.run(runner())
-        except RuntimeError:
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop and loop.is_running():
-                thread = threading.Thread(target=lambda: asyncio.run(runner()))
+            loop = asyncio.get_running_loop()
+            # If we're in a running event loop (like FastAPI), use a thread pool
+            if loop.is_running():
+                import concurrent.futures
+                exception_box = []
+                result_box = []
+                
+                def thread_target():
+                    try:
+                        # Create a fresh event loop in this thread
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+                        try:
+                            result = new_loop.run_until_complete(runner())
+                            result_box.append(result)
+                        finally:
+                            new_loop.close()
+                    except Exception as e:
+                        exception_box.append(e)
+                
+                thread = threading.Thread(target=thread_target)
                 thread.start()
-                thread.join()
-            else:
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                new_loop.run_until_complete(runner())
-                new_loop.close()
+                thread.join(timeout=300)  # 5 minute timeout
+                
+                if thread.is_alive():
+                    raise TimeoutError("TTS generation timed out after 5 minutes")
+                
+                if exception_box:
+                    raise exception_box[0]
+                
+                return result_box[0] if result_box else None
+        except RuntimeError:
+            # No event loop running
+            pass
+        
+        # No running loop - use asyncio.run directly
+        return asyncio.run(runner())
 
     @staticmethod
     def _calculus_on_pitch_scenes() -> List[dict]:

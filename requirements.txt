@@ -28,6 +28,7 @@ replicate>=0.25.0
 lumaai>=1.18.0
 runwayml>=3.22.0
 edge-tts==6.1.12
+playwright==1.40.0
 
 # Backend API
 fastapi==0.108.0

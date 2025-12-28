@@ -58,7 +58,7 @@ export function Library() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050A18] text-white font-sans selection:bg-blue-500/30 overflow-x-hidden relative">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-[#cfaa32]/30 overflow-x-hidden relative">
       <BackgroundGrid />
       <div className="relative z-10 pt-32 pb-20">
       {/* Library Header */}

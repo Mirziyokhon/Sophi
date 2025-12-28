@@ -8,9 +8,11 @@ interface CustomVideoPlayerProps {
   subtitleUrl?: string
   filename: string
   onDownload?: () => void
+  mediaType?: 'video' | 'html_animation'
+  htmlContent?: string
 }
 
-export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload }: CustomVideoPlayerProps) {
+export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload, mediaType = 'video', htmlContent }: CustomVideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -210,9 +212,17 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-6 shadow-2xl">
-      {/* Video Container */}
+      {/* Video/Animation Container */}
       <div className="relative bg-black rounded-lg overflow-hidden mb-4 aspect-video">
-        {videoError ? (
+        {mediaType === 'html_animation' ? (
+          /* HTML Animation - render in iframe */
+          <iframe
+            src={videoUrl}
+            className="w-full h-full border-0"
+            title="Animation"
+            sandbox="allow-scripts allow-same-origin"
+          />
+        ) : videoError ? (
           <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 text-white p-4">
             <div className="text-center">
               <p className="text-lg font-semibold mb-2">❌ Video Error</p>

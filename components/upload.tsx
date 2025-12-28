@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
+import { PDFPreviewComponent } from './pdf-preview'
 
 interface UploadProps {
   onNext: () => void
@@ -22,6 +23,8 @@ export function Upload({ onNext }: UploadProps) {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [fileName, setFileName] = useState('')
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [showPDFPreview, setShowPDFPreview] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -36,15 +39,20 @@ export function Upload({ onNext }: UploadProps) {
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (file.type === 'application/pdf') {
+      setFileName(file.name)
+      setPdfFile(file)
+      setShowPDFPreview(true)
+      setUploaded(false)
+      return
+    }
+
     setLoading(true)
     setFileName(file.name)
     
     try {
       let result
-      if (file.type === 'application/pdf') {
-        result = await api.extractPDF(file)
-        toast.success(`Extracted ${result.word_count} words from PDF`)
-      } else if (file.type.startsWith('image/')) {
+      if (file.type.startsWith('image/')) {
         result = await api.extractImage(file)
         toast.success(`Extracted ${result.word_count} words from image`)
       } else {
@@ -71,7 +79,13 @@ export function Upload({ onNext }: UploadProps) {
       setExtractedContent(result)
       setWordCount(result.word_count)
       setUploaded(true)
-      toast.success(`Extracted ${result.word_count} words from URL`)
+      
+      // Check if content was truncated
+      if (result.text.includes('[Content truncated to first 3000 words]')) {
+        toast.success(`Extracted ${result.word_count} words from URL (content was limited to first 3000 words)`)
+      } else {
+        toast.success(`Extracted ${result.word_count} words from URL`)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to extract URL')
       setUploaded(false)
@@ -95,6 +109,19 @@ export function Upload({ onNext }: UploadProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handlePDFPagesSelected = (pages: string) => {
+    // Store selected pages for extraction
+    console.log('Selected pages:', pages)
+  }
+
+  const handlePDFExtractComplete = (result: any) => {
+    setExtractedContent(result)
+    setWordCount(result.word_count)
+    setUploaded(true)
+    setShowPDFPreview(false)
+    toast.success(`Extracted ${result.word_count} words from PDF`)
   }
 
   const handleNext = async () => {
@@ -159,7 +186,7 @@ export function Upload({ onNext }: UploadProps) {
           transition={{ duration: 0.6, delay: 0.2 }}
           key={tab}
         >
-          {tab === 'file' && (
+          {tab === 'file' && !showPDFPreview && (
             <div 
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-primary/30 hover:border-primary/60 rounded-2xl p-12 text-center transition-smooth cursor-pointer hover:bg-primary/5"
@@ -193,6 +220,14 @@ export function Upload({ onNext }: UploadProps) {
                 </button>
               )}
             </div>
+          )}
+
+          {tab === 'file' && showPDFPreview && pdfFile && (
+            <PDFPreviewComponent
+              file={pdfFile}
+              onPagesSelected={handlePDFPagesSelected}
+              onExtractComplete={handlePDFExtractComplete}
+            />
           )}
 
           {tab === 'link' && (

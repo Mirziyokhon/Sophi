@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sophi Animation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            background: #0f172a; 
+            font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; 
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        /* Main recording container - THIS IS WHAT GETS RECORDED */
+        #recording-container {
+            width: 1920px;
+            height: 1080px;
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e3a5f 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Animation area - bounded rectangle */
+        #animation-area {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            right: 40px;
+            bottom: 200px;
+            background: linear-gradient(180deg, #fefce8 0%, #fef3c7 100%);
+            border-radius: 24px;
+            border: 4px solid #1e293b;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3), inset 0 2px 10px rgba(255,255,255,0.5);
+        }
+        
+        /* Inner stage for animations */
+        #stage {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Decorative corner elements */
+        #animation-area::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border: 2px dashed rgba(0,0,0,0.1);
+            border-radius: 16px;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        /* Subtitle container - separate rectangle */
+        #subtitle-container {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            right: 40px;
+            height: 120px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 16px;
+            border: 3px solid #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        #captions {
+            color: #1e293b;
+            font-size: 2.2rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.4;
+            max-width: 100%;
+        }
+        
+        /* Hidden controls - outside recording area */
+        #controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: none; /* Hidden for recording */
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        /* Animation elements */
+        .anim-element {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+        
+        .shape { position: absolute; transform: translate(-50%, -50%); }
+        .icon { position: absolute; transform: translate(-50%, -50%); font-size: 64px; }
+        .number { position: absolute; transform: translate(-50%, -50%); font-size: 72px; font-weight: 800; }
+        .text-label { position: absolute; font-size: 36px; font-weight: 700; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); }
+        .formula { position: absolute; font-size: 48px; font-family: 'Times New Roman', serif; font-style: italic; }
+        .highlight-box { position: absolute; border-radius: 12px; padding: 20px 30px; }
+        .connector-line { position: absolute; pointer-events: none; }
+        .particle { position: absolute; border-radius: 50%; pointer-events: none; }
+        
+        /* Stick figures */
+        .stick-figure { position: absolute; transform: translate(-50%, -50%); }
+        
+        /* Decorative grid pattern */
+        #stage::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- RECORDING CONTAINER - Playwright captures this -->
+    <div id="recording-container">
+        <!-- Animation Area -->
+        <div id="animation-area">
+            <div id="stage"></div>
+        </div>
+        
+        <!-- Subtitle Area -->
+        <div id="subtitle-container">
+            <div id="captions">Loading...</div>
+        </div>
+    </div>
+    
+    <!-- Controls outside recording area -->
+    <div id="controls">
+        <button onclick="playEngine()">Play</button>
+        <button onclick="pauseEngine()">Pause</button>
+        <button onclick="resetEngine()">Reset</button>
+    </div>
+
+    <!-- Audio element -->
+    <audio 
+        id="narrationAudio" 
+        src="{{AUDIO_DATA_URI}}" 
+        type="audio/mpeg" 
+        preload="auto" 
+        style="display: none;">
+    </audio>
+
+    <script>
+        // Wait for GSAP to be fully loaded
+        if (typeof gsap === 'undefined') {
+            console.error('GSAP not loaded! Animation will not work.');
+        }
+
+        const Library = {
+            // === SKETCH DRAWING FUNCTIONS ===
+            drawCircle: (id, x, y, radius = 80, color = '#333', thickness = 3) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${radius*2}" height="${radius*2}" viewBox="0 0 ${radius*2} ${radius*2}"><circle cx="${radius}" cy="${radius}" r="${radius-3}" fill="none" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createCircle: (id, x, y, size = 80, color = '#6366f1') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};border:4px solid #1e293b;box-shadow:0 8px 20px rgba(0,0,0,0.2);`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawSquare: (id, x, y, size = 80, color = '#333', thickness = 3) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect x="${thickness/2}" y="${thickness/2}" width="${size-thickness}" height="${size-thickness}" fill="none" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createSquare: (id, x, y, size = 80, color = '#f59e0b') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;width:${size}px;height:${size}px;background:${color};border:4px solid #1e293b;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,0.2);`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawTriangle: (id, x, y, size = 80, color = '#333', thickness = 3) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><polygon points="${size/2},${thickness/2} ${size-thickness/2},${size-thickness/2} ${thickness/2},${size-thickness/2}" fill="none" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createTriangle: (id, x, y, size = 80, color = '#10b981') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><polygon points="50,10 90,90 10,90" fill="${color}" stroke="#1e293b" stroke-width="4"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createStar: (id, x, y, size = 80, color = '#eab308') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><polygon points="50,5 61,40 98,40 68,62 79,97 50,75 21,97 32,62 2,40 39,40" fill="${color}" stroke="#1e293b" stroke-width="3"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createHeart: (id, x, y, size = 80, color = '#ef4444') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><path d="M50,88 C20,60 5,40 15,25 C25,10 40,10 50,25 C60,10 75,10 85,25 C95,40 80,60 50,88Z" fill="${color}" stroke="#1e293b" stroke-width="3"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createDiamond: (id, x, y, size = 80, color = '#8b5cf6') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><polygon points="50,5 95,50 50,95 5,50" fill="${color}" stroke="#1e293b" stroke-width="3"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createHexagon: (id, x, y, size = 80, color = '#06b6d4') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><polygon points="50,5 93,25 93,75 50,95 7,75 7,25" fill="${color}" stroke="#1e293b" stroke-width="3"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === NUMBERS ===
+            createNumber: (id, num, x, y, size = 72, color = '#1e293b') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'number';
+                el.style.cssText = `left:${x}px;top:${y}px;font-size:${size}px;color:${color};text-shadow:3px 3px 6px rgba(0,0,0,0.2);`;
+                el.innerText = num;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createNumberBadge: (id, num, x, y, bgColor = '#3b82f6', textColor = '#fff') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;width:100px;height:100px;border-radius:50%;background:${bgColor};border:5px solid #1e293b;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,0.3);`;
+                el.innerHTML = `<span style="font-size:48px;font-weight:800;color:${textColor}">${num}</span>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === ICONS ===
+            createIcon: (id, icon, x, y, size = 64, color = '#1e293b') => {
+                const icons = {
+                    'lightbulb': '<path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zm2 15H10v-1h4v1zm0-2H10v-1h4v1zm1.5-4.5L14 12H10l-1.5-1.5C7.5 9.5 7 8.29 7 9c0 2.76 2.24 5 5 5s5-2.24 5-5c0-.71-.5.5-1.5 1.5z"/>',
+                    'star': '<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>',
+                    'check': '<polyline points="20 6 9 17 4 12"/>',
+                    'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+                    'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+                    'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+                    'minus': '<line x1="5" y1="12" x2="19" y2="12"/>',
+                    'equals': '<line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/>',
+                    'multiply': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+                    'divide': '<circle cx="12" cy="6" r="1.5"/><line x1="5" y1="12" x2="19" y2="12"/><circle cx="12" cy="18" r="1.5"/>',
+                    'question': '<path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+                    'info': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+                    'book': '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+                    'brain': '<path d="M12 2a5 5 0 0 0-5 5v6a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
+                    'target': '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+                    'trophy': '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 22v-4h4v4"/><path d="M6 4v5a6 6 0 0 0 12 0V4"/>',
+                };
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'icon';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[icon] || icons['star']}</svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === TEXT ===
+            createText: (id, text, x, y, size = 36, color = '#1e293b') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'text-label';
+                el.style.cssText = `left:${x}px;top:${y}px;font-size:${size}px;color:${color};`;
+                el.innerText = text;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createTitle: (id, text, x, y, color = '#1e293b') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'text-label';
+                el.style.cssText = `left:${x}px;top:${y}px;font-size:56px;font-weight:800;color:${color};text-shadow:3px 3px 6px rgba(0,0,0,0.15);`;
+                el.innerText = text;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createFormula: (id, formula, x, y, size = 48, color = '#1e293b') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'formula';
+                el.style.cssText = `left:${x}px;top:${y}px;font-size:${size}px;color:${color};background:rgba(255,255,255,0.8);padding:10px 20px;border-radius:8px;border:2px solid ${color};`;
+                el.innerText = formula;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === HIGHLIGHT BOX ===
+            createHighlightBox: (id, x, y, w, h, color = '#fef3c7', borderColor = '#f59e0b') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'highlight-box';
+                el.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;background:${color};border:4px solid ${borderColor};transform:translate(-50%,-50%);`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === ARROWS & LINES ===
+            createArrow: (id, x1, y1, x2, y2, color = '#1e293b', thickness = 4) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'connector-line';
+                el.style.cssText = `left:0;top:0;width:100%;height:100%;`;
+                const angle = Math.atan2(y2 - y1, x2 - x1);
+                const len = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+                el.innerHTML = `<svg width="100%" height="100%" style="position:absolute;overflow:visible;">
+                    <defs><marker id="arrowhead-${id}" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${color}"/></marker></defs>
+                    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${thickness}" marker-end="url(#arrowhead-${id})"/>
+                </svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createLine: (id, x1, y1, x2, y2, color = '#1e293b', thickness = 3, dashed = false) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'connector-line';
+                el.style.cssText = `left:0;top:0;width:100%;height:100%;`;
+                el.innerHTML = `<svg width="100%" height="100%" style="position:absolute;overflow:visible;">
+                    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${thickness}" ${dashed ? 'stroke-dasharray="10,5"' : ''}/>
+                </svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === STICK FIGURES ===
+            createStickFigure: (id, x, y, color = '#333', size = 1) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'stick-figure';
+                el.style.cssText = `left:${x}px;top:${y}px;transform:translate(-50%,-50%) scale(${size});`;
+                el.innerHTML = `
+                    <svg width="80" height="120" viewBox="0 0 80 120">
+                        <circle cx="40" cy="20" r="15" fill="none" stroke="${color}" stroke-width="4"/>
+                        <line x1="40" y1="35" x2="40" y2="75" stroke="${color}" stroke-width="4"/>
+                        <line x1="40" y1="50" x2="15" y2="65" stroke="${color}" stroke-width="4" class="arm-left"/>
+                        <line x1="40" y1="50" x2="65" y2="65" stroke="${color}" stroke-width="4" class="arm-right"/>
+                        <line x1="40" y1="75" x2="20" y2="115" stroke="${color}" stroke-width="4"/>
+                        <line x1="40" y1="75" x2="60" y2="115" stroke="${color}" stroke-width="4"/>
+                    </svg>
+                `;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === PARTICLES ===
+            createParticle: (id, x, y, size = 20, color = '#10b981') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'particle';
+                el.style.cssText = `left:${x}px;top:${y}px;width:${size}px;height:${size}px;background:${color};box-shadow:0 0 ${size}px ${color};transform:translate(-50%,-50%);`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === LEGACY SUPPORT ===
+            createAtom: (id, label, x, y, color = '#3b82f6') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;width:120px;height:120px;border-radius:50%;background:${color};border:4px solid #1e293b;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,0.2);`;
+                el.innerHTML = `<span style="color:white;font-size:2rem;font-weight:bold;">${label}</span>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            createObject: (id, type, x, y, color = '#6366f1') => {
+                if (type === 'circle') return Library.createCircle(id, x, y, 80, color);
+                if (type === 'square') return Library.createSquare(id, x, y, 80, color);
+                if (type === 'triangle') return Library.createTriangle(id, x, y, 80, color);
+                if (type === 'star') return Library.createStar(id, x, y, 80, color);
+                return Library.createCircle(id, x, y, 80, color);
+            },
+            
+            drawArrow: (id, x1, y1, x2, y2, color = '#333', thickness = 4) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                const length = Math.sqrt(dx*dx + dy*dy);
+                el.style.cssText = `left:${x1}px;top:${y1}px;transform:rotate(${angle}deg);`;
+                el.innerHTML = `<svg width="${length}" height="${thickness*4}" viewBox="0 0 ${length} ${thickness*4}"><line x1="0" y1="${thickness*2}" x2="${length-thickness*8}" y2="${thickness*2}" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round"/><polygon points="${length-thickness*8},${thickness*2-thickness*3} ${length},${thickness*2} ${length-thickness*8},${thickness*2+thickness*3}" fill="${color}"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawText: (id, text, x, y, size = 48, color = '#333') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;font-size:${size}px;color:${color};font-family:'Patrick Hand',cursive;text-shadow:none;`;
+                el.innerText = text;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawNumber: (id, number, x, y, size = 72, color = '#333') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;font-size:${size}px;color:${color};font-family:'Patrick Hand',cursive;text-shadow:none;`;
+                el.innerText = number;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawIcon: (id, icon, x, y, size = 64, color = '#333') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                const icons = {
+                    'book': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z" fill="none" stroke="${color}" stroke-width="2"/></svg>`,
+                    'lightbulb': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z" fill="none" stroke="${color}" stroke-width="2"/></svg>`,
+                    'search': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" fill="none" stroke="${color}" stroke-width="2"/><path d="m21 21-4.35-4.35" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/></svg>`,
+                    'column': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M7 21h10V5H7v16zm0-18h10V1H7v2z" fill="none" stroke="${color}" stroke-width="2"/></svg>`,
+                    'scroll': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-4-6zm4 18H6V4h7v5h5v11z" fill="none" stroke="${color}" stroke-width="2"/></svg>`,
+                    'school': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z" fill="none" stroke="${color}" stroke-width="2"/></svg>`,
+                    'sword': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M6.92 5L5 7l1.92 1.92L6.92 5zm10.08 10L16 15.92 17.92 17.08 17 16.08zM12 2l-1.41 1.41L11.17 5l1.42-1.41L12 2zm4 4l-1.41 1.41L15.17 9l1.42-1.41L16 6zM5.92 13L3 15.92 4.08 17l2.92-2.92L5.92 13zm10.08 0l-2.92 2.92L17.08 17 20 14.08 16 10.08z" fill="none" stroke="${color}" stroke-width="2"/></svg>`,
+                    'users': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A3.001 3.001 0 0 0 17.04 7H16.9c-.81 0-1.54.37-2.01.94l-2.54 7.63H15v6h5zm-12.5-11c.83 0 1.5-.67 1.5-1.5S8.33 4 7.5 4 6 4.67 6 5.5 6.67 7 7.5 7zm-2 2c-.28 0-.5.22-.5.5v6h2v5h5v-5h2v-6c0-.28-.22-.5-.5-.5h-8z" fill="none" stroke="${color}" stroke-width="2"/></svg>`
+                };
+                el.innerHTML = icons[icon] || icons['book'];
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawStickFigure: (id, x, y, pose = 'standing', color = '#333') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;`;
+                el.innerHTML = `<svg width="80" height="120" viewBox="0 0 80 120"><circle cx="40" cy="20" r="15" fill="none" stroke="${color}" stroke-width="3"/><line x1="40" y1="35" x2="40" y2="70" stroke="${color}" stroke-width="3"/><line x1="40" y1="45" x2="25" y2="60" stroke="${color}" stroke-width="3"/><line x1="40" y1="45" x2="55" y2="60" stroke="${color}" stroke-width="3"/><line x1="40" y1="70" x2="30" y2="100" stroke="${color}" stroke-width="3"/><line x1="40" y1="70" x2="50" y2="100" stroke="${color}" stroke-width="3"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawHighlight: (id, x, y, width, height, color = '#fef3c7') => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:${x}px;top:${y}px;width:${width}px;height:${height}px;background:${color};border:2px dashed #f59e0b;border-radius:8px;opacity:0.7;`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            drawPath: (id, points, color = '#333', thickness = 3) => {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = 'shape';
+                el.style.cssText = `left:0;top:0;`;
+                const pointArray = points.split(' ').map(p => p.split(','));
+                const pathData = pointArray.map((p, i) => `${i===0?'M':'L'} ${p[0]} ${p[1]}`).join(' ');
+                el.innerHTML = `<svg width="1920" height="800" viewBox="0 0 1920 800"><path d="${pathData}" fill="none" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+                document.getElementById('stage').appendChild(el);
+                return el;
+            },
+            
+            // === ANIMATIONS ===
+            animateDraw: (id, timeline, startTime, duration = 1.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0)';
+                timeline.to(el, { opacity: 1, transform: 'scale(1)', duration, ease: 'power2.out' }, startTime);
+            },
+            
+            writeText: (id, timeline, startTime, duration = 1) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0.8)';
+                timeline.to(el, { opacity: 1, transform: 'scale(1)', duration, ease: 'back.out(1.7)' }, startTime);
+            },
+            
+            connect: (from, to, timeline, startTime, duration = 0.5) => {
+                const fromEl = document.getElementById(from);
+                const toEl = document.getElementById(to);
+                if (!fromEl || !toEl) return;
+                const line = document.createElement('div');
+                line.style.cssText = `position:absolute;background:#333;height:3px;transform-origin:left center;`;
+                document.getElementById('stage').appendChild(line);
+                
+                const updateLine = () => {
+                    const x1 = parseFloat(fromEl.style.left) + parseFloat(fromEl.offsetWidth)/2;
+                    const y1 = parseFloat(fromEl.style.top) + parseFloat(fromEl.offsetHeight)/2;
+                    const x2 = parseFloat(toEl.style.left) + parseFloat(toEl.offsetWidth)/2;
+                    const y2 = parseFloat(toEl.style.top) + parseFloat(toEl.offsetHeight)/2;
+                    const length = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+                    const angle = Math.atan2(y2-y1, x2-x1) * 180 / Math.PI;
+                    line.style.left = x1 + 'px';
+                    line.style.top = y1 + 'px';
+                    line.style.width = length + 'px';
+                    line.style.transform = `rotate(${angle}deg)`;
+                };
+                
+                line.style.opacity = '0';
+                timeline.to(line, { opacity: 1, duration: duration/2, ease: 'power2.out', onStart: updateLine }, startTime);
+            },
+            
+            circle: (id, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const circle = document.createElement('div');
+                circle.style.cssText = `position:absolute;border:3px solid #f59e0b;border-radius:50%;pointer-events:none;`;
+                const rect = el.getBoundingClientRect();
+                const stage = document.getElementById('stage').getBoundingClientRect();
+                circle.style.left = (rect.left - stage.left - 10) + 'px';
+                circle.style.top = (rect.top - stage.top - 10) + 'px';
+                circle.style.width = (rect.width + 20) + 'px';
+                circle.style.height = (rect.height + 20) + 'px';
+                circle.style.opacity = '0';
+                circle.style.transform = 'scale(0)';
+                document.getElementById('stage').appendChild(circle);
+                timeline.to(circle, { opacity: 1, transform: 'scale(1)', duration, ease: 'back.out(1.7)' }, startTime);
+            },
+            
+            underline: (id, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const line = document.createElement('div');
+                line.style.cssText = `position:absolute;background:#f59e0b;height:3px;pointer-events:none;`;
+                const rect = el.getBoundingClientRect();
+                const stage = document.getElementById('stage').getBoundingClientRect();
+                line.style.left = (rect.left - stage.left) + 'px';
+                line.style.top = (rect.top - stage.top + rect.height + 5) + 'px';
+                line.style.width = '0px';
+                document.getElementById('stage').appendChild(line);
+                timeline.to(line, { width: rect.width, duration, ease: 'power2.out' }, startTime);
+            },
+            
+            erase: (id, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { opacity: 0, scale: 0.5, duration, ease: 'power2.in' }, startTime);
+            },
+            
+            // === ORIGINAL ANIMATIONS ===
+            moveObject: (id, toX, toY, timeline, startTime, duration = 1) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { left: toX, top: toY, duration, ease: "power2.inOut" }, startTime);
+            },
+            
+            fadeIn: (id, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.fromTo(el, { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration, ease: "back.out(1.7)" }, startTime);
+            },
+            
+            fadeOut: (id, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { opacity: 0, scale: 0.5, duration, ease: "power2.in" }, startTime);
+            },
+            
+            scale: (id, scaleVal, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { scale: scaleVal, duration, ease: "power2.out" }, startTime);
+            },
+            
+            rotate: (id, degrees, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { rotation: degrees, duration, ease: "power2.inOut" }, startTime);
+            },
+            
+            pulse: (id, timeline, startTime, duration = 0.5) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { scale: 1.2, duration: duration/2, ease: "power2.out", yoyo: true, repeat: 1 }, startTime);
+            },
+            
+            shake: (id, timeline, startTime, intensity = 10) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { x: intensity, duration: 0.1, ease: "power2.inOut", yoyo: true, repeat: 5 }, startTime);
+            },
+            
+            bounce: (id, timeline, startTime) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                timeline.to(el, { y: -30, duration: 0.3, ease: "power2.out", yoyo: true, repeat: 1 }, startTime);
+            },
+            
+            updateCharge: (id, charge) => {
+                const el = document.querySelector(`#${id} .charge-label`);
+                if (el) el.innerText = (charge > 0 ? '+' : '') + charge;
+            },
+            
+            animateStickFigure: (id, pose, timeline, startTime) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const armRight = el.querySelector('.arm-right');
+                if (pose === 'wave' && armRight) {
+                    timeline.to(armRight, { attr: { x2: 65, y2: 30 }, duration: 0.3, ease: "power2.out", yoyo: true, repeat: 3 }, startTime);
+                } else if (pose === 'point' && armRight) {
+                    timeline.to(armRight, { attr: { x2: 80, y2: 40 }, duration: 0.5, ease: "power2.out" }, startTime);
+                }
+            },
+            
+            transferElectron: (fromId, toId, timeline, startTime) => {
+                const fromEl = document.getElementById(fromId);
+                const toEl = document.getElementById(toId);
+                if (!fromEl || !toEl) return;
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.cssText = `width:20px;height:20px;background:#10b981;box-shadow:0 0 15px #34d399;`;
+                document.getElementById('stage').appendChild(particle);
+                const sx = parseFloat(fromEl.style.left), sy = parseFloat(fromEl.style.top);
+                const ex = parseFloat(toEl.style.left), ey = parseFloat(toEl.style.top);
+                timeline.fromTo(particle, { left: sx, top: sy, opacity: 0, scale: 0 }, { left: ex, top: ey, opacity: 1, scale: 1, duration: 1.5, ease: "power2.inOut" }, startTime)
+                    .to(particle, { opacity: 0, scale: 0, duration: 0.3 }, startTime + 1.5);
+            }
+        };
+
+        const sceneData = {{SCENE_DATA_JSON}};
+        const audioElement = document.getElementById('narrationAudio');
+        const hasAudio = audioElement && audioElement.src && audioElement.src !== window.location.href;
+
+        let tl = gsap.timeline({ paused: true });
+
+        function initEngine() {
+            document.getElementById('captions').innerText = 'Ready to start...';
+            
+            if (sceneData.setup) {
+                sceneData.setup.forEach(s => {
+                    if (Library[s.action]) {
+                        Library[s.action](...s.params);
+                    }
+                });
+            }
+
+            if (sceneData.timeline) {
+                sceneData.timeline.forEach(step => {
+                    tl.to('#captions', { 
+                        onStart: () => { 
+                            document.getElementById('captions').innerText = step.text || ''; 
+                        },
+                        duration: 0.1 
+                    }, step.t);
+
+                    if (step.action && Library[step.action]) {
+                        if (step.action === 'transferElectron') {
+                            Library.transferElectron(step.from, step.to, tl, step.t);
+                        } else if (step.action === 'updateCharge') {
+                            tl.to({}, { 
+                                onStart: () => Library.updateCharge(step.target, step.val), 
+                                duration: 0.1 
+                            }, step.t);
+                        } else if (step.action === 'animateStickFigure') {
+                            Library.animateStickFigure(step.target, step.pose, tl, step.t);
+                        } else if (step.action === 'moveObject') {
+                            Library.moveObject(step.target, step.toX, step.toY, tl, step.t, step.duration || 1);
+                        } else if (step.action === 'fadeIn') {
+                            Library.fadeIn(step.target, tl, step.t, step.duration || 0.5);
+                        } else if (step.action === 'fadeOut') {
+                            Library.fadeOut(step.target, tl, step.t, step.duration || 0.5);
+                        } else if (step.action === 'animateDraw') {
+                            Library.animateDraw(step.target, tl, step.t, step.duration || 1.5);
+                        } else if (step.action === 'writeText') {
+                            Library.writeText(step.target, tl, step.t, step.duration || 1);
+                        } else if (step.action === 'connect') {
+                            Library.connect(step.from, step.to, tl, step.t, step.duration || 0.5);
+                        } else if (step.action === 'circle') {
+                            Library.circle(step.target, tl, step.t, step.duration || 0.5);
+                        } else if (step.action === 'underline') {
+                            Library.underline(step.target, tl, step.t, step.duration || 0.5);
+                        } else if (step.action === 'erase') {
+                            Library.erase(step.target, tl, step.t, step.duration || 0.5);
+                        }
+                    }
+                });
+            }
+        }
+
+        function playEngine() {
+            if (tl.progress() === 1) {
+                tl.restart();
+                if (hasAudio) {
+                    audioElement.currentTime = 0;
+                    audioElement.play().catch(e => console.warn('Audio play failed:', e));
+                }
+            } else {
+                tl.play();
+                if (hasAudio) {
+                    audioElement.play().catch(e => console.warn('Audio play failed:', e));
+                }
+            }
+        }
+
+        function pauseEngine() {
+            tl.pause();
+            if (hasAudio) {
+                audioElement.pause();
+            }
+        }
+
+        function resetEngine() {
+            tl.kill();
+            if (hasAudio) {
+                audioElement.pause();
+                audioElement.currentTime = 0;
+            }
+            document.querySelectorAll('.atom, .electron, .stick-figure, .object, .text-label').forEach(e => e.remove());
+            document.getElementById('captions').innerText = "Ready to start...";
+            tl = gsap.timeline({ paused: true });
+            initEngine();
+        }
+
+        // Sync audio with timeline when seeking
+        if (hasAudio) {
+            tl.eventCallback('onUpdate', () => {
+                const currentTime = tl.time();
+                const audioDiff = Math.abs(audioElement.currentTime - currentTime);
+                // Resync if audio drifts more than 0.2 seconds
+                if (audioDiff > 0.2) {
+                    audioElement.currentTime = currentTime;
+                }
+            });
+        }
+
+        // Auto-start animation on page load (for recording)
+        window.onload = () => {
+            initEngine();
+            // Auto-play after a brief delay to ensure everything is ready
+            setTimeout(() => {
+                playEngine();
+                console.log('Animation auto-started');
+            }, 500);
+        };
+        
+        // Also expose for external control
+        window.masterTimeline = tl;
+        window.playAnimation = playEngine;
+    </script>
+</body>
+</html>

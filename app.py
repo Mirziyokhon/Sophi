@@ -215,18 +215,18 @@ def create_video_page():
                     st.error(f"Error: {str(e)}")
     
     elif content_type == "✍️ Plain Text":
-        extracted_text = st.text_area(
+        text_input = st.text_area(
             "Paste your learning content:",
             height=200,
             placeholder="Paste your notes, definitions, or study materials here..."
         )
-        if extracted_text:
-            word_count = len(extracted_text.split())
-            if word_count > config.MAX_CONTENT_LENGTH:
-                st.error(f"⚠️ Content exceeds maximum length of {config.MAX_CONTENT_LENGTH} words (found {word_count} words)")
-                extracted_text = None
-            else:
+        if text_input and text_input.strip():
+            try:
+                extracted_text, word_count = TextExtractor.extract('text', text_input)
                 st.success(f"✅ {word_count} words ready for processing")
+            except ValueError as e:
+                st.error(f"⚠️ {str(e)}")
+                extracted_text = None
     
     # Show preview of extracted text
     if extracted_text:

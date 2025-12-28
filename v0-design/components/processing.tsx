@@ -17,9 +17,14 @@ export function Processing({ onComplete }: ProcessingProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
+    // Prevent duplicate API calls (React StrictMode can cause double renders)
+    if (isGenerating) return
+    
     setIsProcessing(true)
+    setIsGenerating(true)
     
     const generateVideo = async () => {
       if (!extractedContent || !selectedInterest) {

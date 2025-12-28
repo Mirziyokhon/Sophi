@@ -23,6 +23,7 @@ export function SketchAnimationPlayer({
   const [isScrubbing, setIsScrubbing] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const animationRef = useRef<number | null>(null)
@@ -30,6 +31,9 @@ export function SketchAnimationPlayer({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  
+  // Check if we have Gemini-generated HTML animation
+  const hasGeminiAnimation = animationHtml && animationHtml.includes('{{SCENE_DATA_JSON}}') === false && animationHtml.length > 500
 
   // Parse script into timed subtitles and voiceover segments
   const subtitles = script ? 
@@ -680,15 +684,39 @@ export function SketchAnimationPlayer({
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-6 shadow-2xl">
-      {/* Canvas Container */}
+      {/* Animation Container - Gemini HTML or Canvas fallback */}
       <div className="relative bg-black rounded-lg overflow-hidden mb-4 aspect-video">
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={450}
-          className="w-full h-full"
-          style={{ imageRendering: 'crisp-edges' }}
-        />
+        {hasGeminiAnimation ? (
+          /* Render Gemini 3 Pro HTML Animation - scale iframe container */
+          <div className="w-full h-full overflow-hidden" style={{ position: 'relative' }}>
+            <iframe
+              ref={iframeRef}
+              srcDoc={animationHtml}
+              title="Gemini Animation"
+              sandbox="allow-scripts allow-same-origin"
+              style={{ 
+                border: 'none',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '1920px',
+                height: '1080px',
+                transform: 'scale(0.445)',
+                transformOrigin: 'top left',
+                backgroundColor: '#fffcf5'
+              }}
+            />
+          </div>
+        ) : (
+          /* Fallback canvas animation */
+          <canvas
+            ref={canvasRef}
+            width={800}
+            height={450}
+            className="w-full h-full"
+            style={{ imageRendering: 'crisp-edges' }}
+          />
+        )}
       </div>
 
       {/* Subtitle Panel */}

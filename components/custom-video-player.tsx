@@ -209,18 +209,18 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-6 shadow-2xl">
+    <div className="w-full max-w-4xl mx-auto bg-card border border-brand/20 rounded-2xl p-6 shadow-2xl">
       {/* Video Container */}
-      <div className="relative bg-black rounded-lg overflow-hidden mb-4 aspect-video">
+      <div className="relative bg-muted rounded-lg overflow-hidden mb-4 aspect-video">
         {videoError ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-900/20 text-white p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-destructive/20 text-foreground p-4">
             <div className="text-center">
               <p className="text-lg font-semibold mb-2">❌ Video Error</p>
               <p className="text-sm opacity-80">{videoError}</p>
               <p className="text-xs opacity-60 mt-2">URL: {videoUrl}</p>
               <button 
                 onClick={() => window.open(videoUrl, '_blank')}
-                className="mt-4 px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                className="mt-4 px-4 py-2 bg-foreground/10 rounded-lg hover:bg-foreground/20 transition-colors"
               >
                 Try Opening Directly
               </button>
@@ -243,27 +243,27 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
       </div>
 
       {/* Controls Panel */}
-      <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4 mb-4">
+      <div className="bg-brand/5 backdrop-blur-sm rounded-lg p-4 mb-4 border border-brand/10">
         {/* Timeline */}
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-white font-mono text-sm min-w-[60px]">
+          <span className="text-foreground font-mono text-sm min-w-[60px]">
             {formatTime(currentTime)}
           </span>
           <div
             ref={progressBarRef}
-            className="flex-1 h-2 bg-white/30 rounded-full cursor-pointer relative"
+            className="flex-1 h-2 bg-brand/20 rounded-full cursor-pointer relative"
             onMouseDown={handleScrubStart}
           >
             <div
-              className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-400 to-blue-400 rounded-full"
+              className="absolute top-0 left-0 h-full bg-brand rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
             <div
-                className="absolute h-4 w-4 bg-white rounded-full -top-1 shadow-md border-2 border-purple-300 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ left: `${progressPercent}%` }}
+              className="absolute h-4 w-4 bg-background rounded-full -top-1 shadow-md border-2 border-brand transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ left: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-white font-mono text-sm min-w-[60px]">
+          <span className="text-foreground font-mono text-sm min-w-[60px]">
             {formatTime(duration)}
           </span>
         </div>
@@ -273,7 +273,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
           {/* Play/Pause */}
           <button
             onClick={handlePlayPause}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+            className="flex items-center gap-2 bg-brand text-brand-foreground px-4 py-2 rounded-full hover:bg-brand/90 hover:shadow-lg transition-all hover:scale-105 font-medium"
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} />}
             {isPlaying ? 'Pause' : 'Play'}
@@ -282,7 +282,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
           {/* Skip Buttons */}
           <button
             onClick={() => handleSkip(-10)}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+            className="flex items-center gap-2 bg-brand text-brand-foreground px-3 py-2 rounded-full hover:bg-brand/90 hover:shadow-lg transition-all hover:scale-105 font-medium"
           >
             <SkipBack size={16} />
             -10s
@@ -290,7 +290,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
 
           <button
             onClick={() => handleSkip(10)}
-            className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+            className="flex items-center gap-2 bg-brand text-brand-foreground px-3 py-2 rounded-full hover:bg-brand/90 hover:shadow-lg transition-all hover:scale-105 font-medium"
           >
             <SkipForward size={16} />
             +10s
@@ -298,7 +298,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
 
           {/* Volume Control */}
           <div className="flex items-center gap-2">
-            <Volume2 size={16} className="text-white" />
+            <Volume2 size={16} className="text-foreground" />
             <input
               type="range"
               min="0"
@@ -306,7 +306,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
               step="0.1"
               value={volume}
               onChange={handleVolumeChange}
-              className="w-20 h-1 bg-white/30 rounded-full appearance-none cursor-pointer"
+              className="w-20 h-1 bg-brand/30 rounded-full appearance-none cursor-pointer accent-brand"
             />
           </div>
 
@@ -314,21 +314,21 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
           <select
             value={playbackRate}
             onChange={handleSpeedChange}
-            className="bg-white/20 text-white px-3 py-1 rounded-full border border-white/30 focus:outline-none"
+            className="bg-brand/10 text-foreground px-3 py-1 rounded-full border border-brand/30 focus:outline-none focus:border-brand"
           >
-            <option value="0.5">0.5x</option>
-            <option value="0.75">0.75x</option>
-            <option value="1">1x</option>
-            <option value="1.25">1.25x</option>
-            <option value="1.5">1.5x</option>
-            <option value="2">2x</option>
+            <option value="0.5" className="bg-card text-foreground">0.5x</option>
+            <option value="0.75" className="bg-card text-foreground">0.75x</option>
+            <option value="1" className="bg-card text-foreground">1x</option>
+            <option value="1.25" className="bg-card text-foreground">1.25x</option>
+            <option value="1.5" className="bg-card text-foreground">1.5x</option>
+            <option value="2" className="bg-card text-foreground">2x</option>
           </select>
         </div>
       </div>
 
       {/* Subtitle Panel */}
-      <div className="bg-black/90 backdrop-blur-sm rounded-lg p-6 mb-4 min-h-[100px] max-h-[200px] overflow-y-auto border-2 border-purple-400/30">
-        <div className="text-white text-center text-lg leading-relaxed">
+      <div className="bg-brand/5 backdrop-blur-sm rounded-lg p-6 mb-4 min-h-[100px] max-h-[200px] overflow-y-auto border border-brand/30">
+        <div className="text-foreground text-center text-lg leading-relaxed">
           {currentSubtitle || '📝 Subtitles will appear here...'}
         </div>
       </div>
@@ -337,7 +337,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
       <div className="flex gap-3 flex-wrap">
         <button
           onClick={handleDownloadVideo}
-          className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+          className="flex items-center gap-2 bg-brand/10 border border-brand/20 text-brand px-4 py-2 rounded-full hover:bg-brand/20 transition-all hover:scale-105"
         >
           <Download size={16} />
           Download MP4
@@ -345,7 +345,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
 
         <button
           onClick={() => alert('Audio extraction coming soon! 🎵')}
-          className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+          className="flex items-center gap-2 bg-brand/10 border border-brand/20 text-brand px-4 py-2 rounded-full hover:bg-brand/20 transition-all hover:scale-105"
         >
           <FileAudio size={16} />
           Extract Audio
@@ -353,7 +353,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
 
         <button
           onClick={() => alert('GIF creation coming soon! 🖼️')}
-          className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+          className="flex items-center gap-2 bg-brand/10 border border-brand/20 text-brand px-4 py-2 rounded-full hover:bg-brand/20 transition-all hover:scale-105"
         >
           <FileImage size={16} />
           Create GIF
@@ -362,7 +362,7 @@ export function CustomVideoPlayer({ videoUrl, subtitleUrl, filename, onDownload 
         {subtitleUrl && (
           <button
             onClick={handleDownloadSubtitles}
-            className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 rounded-full hover:shadow-lg transition-all hover:scale-105"
+            className="flex items-center gap-2 bg-brand/10 border border-brand/20 text-brand px-4 py-2 rounded-full hover:bg-brand/20 transition-all hover:scale-105"
           >
             <FileText size={16} />
             Download Subtitles

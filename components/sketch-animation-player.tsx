@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Play, Pause, Download } from 'lucide-react'
+import { useTheme } from 'next-themes'
 
 interface SketchAnimationPlayerProps {
   animationHtml: string
@@ -30,6 +31,22 @@ export function SketchAnimationPlayer({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
+  
+  // Theme-aware colors
+  const colors = {
+    background: isDark ? '#2A0813' : '#F4EEE9',
+    stroke: isDark ? '#F4EEE9' : '#2A0813',
+    strokeLight: isDark ? '#4a4a6a' : '#e0e0e0',
+    text: isDark ? '#F4EEE9' : '#2A0813',
+    accent1: '#E74C3C',
+    accent2: '#27AE60',
+    accent3: '#3498DB',
+    accent4: '#F39C12',
+    thoughtBubble: isDark ? '#a0a0a0' : '#666'
+  }
 
   // Parse script into timed subtitles and voiceover segments
   const subtitles = script ? 
@@ -52,15 +69,15 @@ export function SketchAnimationPlayer({
   // Enhanced animation with stickman based on script content
   const renderScene = (ctx: CanvasRenderingContext2D, time: number) => {
     const canvas = ctx.canvas
-    ctx.fillStyle = '#fffcf5'
+    ctx.fillStyle = colors.background
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     
     // Set font
     ctx.font = "20px 'Patrick Hand', var(--font-patrick-hand), cursive"
-    ctx.fillStyle = '#333'
+    ctx.fillStyle = colors.text
 
     // Stickman drawing utilities
-    const roughLine = (x1: number, y1: number, x2: number, y2: number, color = '#333', width = 2) => {
+    const roughLine = (x1: number, y1: number, x2: number, y2: number, color = colors.stroke, width = 2) => {
       ctx.strokeStyle = color
       ctx.lineWidth = width
       ctx.lineCap = 'round'
@@ -70,7 +87,7 @@ export function SketchAnimationPlayer({
       ctx.stroke()
     }
 
-    const roughCircle = (x: number, y: number, r: number, color = '#333') => {
+    const roughCircle = (x: number, y: number, r: number, color = colors.stroke) => {
       ctx.strokeStyle = color
       ctx.lineWidth = 2
       ctx.beginPath()
@@ -87,7 +104,7 @@ export function SketchAnimationPlayer({
       ctx.stroke()
     }
 
-    const drawStickman = (x: number, y: number, scale: number, pose = 'idle', color = '#333') => {
+    const drawStickman = (x: number, y: number, scale: number, pose = 'idle', color = colors.stroke) => {
       ctx.save()
       ctx.translate(x, y)
       ctx.scale(scale, scale)
@@ -130,7 +147,7 @@ export function SketchAnimationPlayer({
         roughLine(0, 0, -10, 30, color)
         roughLine(0, 0, 10, 30, color)
         // Thought bubble
-        ctx.strokeStyle = '#999'
+        ctx.strokeStyle = colors.thoughtBubble
         ctx.lineWidth = 1
         ctx.beginPath()
         ctx.arc(30, -70, 15, 0, Math.PI * 2)
@@ -155,12 +172,12 @@ export function SketchAnimationPlayer({
       const uniqueSeed = contentHash % 1000
       
       // Clean background with subtle animation
-      ctx.fillStyle = '#fffcf5'
+      ctx.fillStyle = colors.background
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       
       // Animated background elements - unique per content
       const time = Date.now() / 1000
-      ctx.strokeStyle = '#e0e0e0'
+      ctx.strokeStyle = colors.strokeLight
       ctx.lineWidth = 1
       
       // Unique floating geometric shapes based on content
@@ -495,17 +512,17 @@ export function SketchAnimationPlayer({
         cancelAnimationFrame(animationRef.current)
       }
     }
-  }, [isPlaying, duration, isScrubbing])
+  }, [isPlaying, duration, isScrubbing, isDark])
 
-  // Initialize canvas
+  // Initialize canvas and re-render on theme change
   useEffect(() => {
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d')
       if (ctx) {
-        renderScene(ctx, 0)
+        renderScene(ctx, currentTime * 1000)
       }
     }
-  }, [])
+  }, [isDark])
 
   const handlePlayPause = () => {
     if (currentTime >= duration) {
@@ -679,9 +696,9 @@ export function SketchAnimationPlayer({
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-6 shadow-2xl">
+    <div className="w-full max-w-4xl mx-auto bg-card border border-brand/20 rounded-2xl p-6 shadow-2xl">
       {/* Canvas Container */}
-      <div className="relative bg-black rounded-lg overflow-hidden mb-4 aspect-video">
+      <div className="relative bg-muted rounded-lg overflow-hidden mb-4 aspect-video">
         <canvas
           ref={canvasRef}
           width={800}
@@ -692,34 +709,34 @@ export function SketchAnimationPlayer({
       </div>
 
       {/* Subtitle Panel */}
-      <div className="bg-black/90 backdrop-blur-sm rounded-lg p-6 mb-4 min-h-[80px] border-2 border-purple-400/30">
-        <div className="text-white text-center text-lg leading-relaxed">
+      <div className="bg-brand/5 backdrop-blur-sm rounded-lg p-6 mb-4 min-h-[80px] border border-brand/10">
+        <div className="text-foreground text-center text-lg leading-relaxed">
           {currentSubtitle || '📝 Subtitles will appear here...'}
         </div>
       </div>
 
       {/* Controls Panel */}
-      <div className="bg-black/80 backdrop-blur-sm rounded-lg p-4 mb-4">
+      <div className="bg-brand/5 backdrop-blur-sm rounded-lg p-4 mb-4 border border-brand/10">
         {/* Timeline */}
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-white font-mono text-sm min-w-[60px]">
+          <span className="text-foreground/80 font-mono text-sm min-w-[60px]">
             {formatTime(currentTime)}
           </span>
           <div
             ref={timelineRef}
-            className="flex-1 h-3 bg-white/20 rounded-full cursor-pointer relative group"
+            className="flex-1 h-3 bg-brand/20 rounded-full cursor-pointer relative group"
             onMouseDown={handleScrubStart}
           >
             <div
-              className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-400 to-blue-400 rounded-full"
+              className="absolute top-0 left-0 h-full bg-brand rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
             <div 
-              className="absolute h-5 w-5 bg-white rounded-full -top-1 shadow-md border-2 border-purple-300 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute h-5 w-5 bg-background rounded-full -top-1 shadow-md border-2 border-brand transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ left: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-white font-mono text-sm min-w-[60px]">
+          <span className="text-foreground/80 font-mono text-sm min-w-[60px]">
             {formatTime(duration)}
           </span>
         </div>
@@ -732,13 +749,13 @@ export function SketchAnimationPlayer({
             disabled={isExporting}
             className={`flex items-center gap-2 px-6 py-2 rounded-full transition-all hover:scale-105 ${
               isExporting 
-                ? 'bg-gray-500 text-white cursor-not-allowed' 
-                : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:shadow-lg'
+                ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                : 'bg-brand text-brand-foreground hover:bg-brand/90 hover:shadow-lg font-medium'
             }`}
           >
             {isExporting ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-brand-foreground border-t-transparent rounded-full animate-spin" />
                 Exporting...
               </>
             ) : (
@@ -762,8 +779,8 @@ export function SketchAnimationPlayer({
               }}
               className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all hover:scale-105 ${
                 isSpeaking 
-                  ? 'bg-red-500 text-white hover:bg-red-600' 
-                  : 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:shadow-lg'
+                  ? 'bg-destructive/20 border border-destructive/50 text-destructive hover:bg-destructive/30' 
+                  : 'bg-brand/10 border border-brand/20 text-brand hover:bg-brand/20 hover:shadow-lg'
               }`}
             >
               {isSpeaking ? (
@@ -789,8 +806,8 @@ export function SketchAnimationPlayer({
           disabled={isExporting}
           className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all hover:scale-105 ${
             isExporting
-              ? 'bg-gray-500 text-white cursor-not-allowed'
-              : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:shadow-lg'
+              ? 'bg-muted text-muted-foreground cursor-not-allowed'
+              : 'bg-brand/10 border border-brand/20 text-brand hover:bg-brand/20 hover:shadow-lg'
           }`}
         >
           <Download size={16} />

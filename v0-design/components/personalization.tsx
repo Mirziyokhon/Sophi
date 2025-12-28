@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
+import { api } from '@/lib/api'
+import { Clock, TrendingUp, FileText, Wrench } from 'lucide-react'
 
 interface PersonalizationProps {
   onNext: () => void
@@ -18,15 +20,17 @@ const presets = [
 ]
 
 export function Personalization({ onNext }: PersonalizationProps) {
-  const { setSelectedInterest, selectedInterest, duration, setDuration } = useApp()
+  const { extractedContent, setSelectedInterest, selectedInterest, duration, setDuration } = useApp()
   const [selectedPreset, setSelectedPreset] = useState<string | null>(selectedInterest)
   const [customText, setCustomText] = useState(selectedInterest && !presets.find(p => p.label === selectedInterest) ? selectedInterest : '')
   const [showCustom, setShowCustom] = useState(false)
+  const [durationRecommendation, setDurationRecommendation] = useState<any>(null)
+  const [loadingRecommendation, setLoadingRecommendation] = useState(false)
 
   const isReady = selectedPreset || customText.trim().length > 0
   
   const durationOptions = [
-    { value: 30, label: '30 seconds' },
+    { value: 30, label: '0.5 minutes' },
     { value: 60, label: '1 minute' },
     { value: 90, label: '1.5 minutes' },
     { value: 120, label: '2 minutes' },
@@ -34,11 +38,74 @@ export function Personalization({ onNext }: PersonalizationProps) {
     { value: 180, label: '3 minutes' }
   ]
 
+  // Get duration recommendation when content is available
+  useEffect(() => {
+    if (extractedContent?.text) {
+      fetchDurationRecommendation()
+    }
+  }, [extractedContent])
+
+  const fetchDurationRecommendation = async () => {
+    if (!extractedContent?.text) return
+    
+    setLoadingRecommendation(true)
+    try {
+      const response = await api.getDurationRecommendation(extractedContent.text)
+      setDurationRecommendation(response)
+      
+      // Auto-set recommended duration as default
+      setDuration(response.recommendation.recommended_duration)
+      console.log('Auto-set duration to:', response.recommendation.recommended_duration)
+    } catch (error) {
+      console.error('Failed to get duration recommendation:', error)
+    } finally {
+      setLoadingRecommendation(false)
+    }
+  }
+
   const handleNext = () => {
     const interest = customText.trim() || selectedPreset
     if (interest) {
       setSelectedInterest(interest)
       onNext()
+    }
+  }
+
+  // Drag handlers for progress bar (updated for 60-180 range)
+  const handleBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percentage = Math.max(0, Math.min(1, x / rect.width))
+    const newDuration = Math.round(60 + (percentage * 120)) // 60 to 180 range
+    
+    // Snap to nearest duration option
+    const nearestOption = durationOptions.reduce((prev, curr) => 
+      Math.abs(curr.value - newDuration) < Math.abs(prev.value - newDuration) ? curr : prev
+    )
+    setDuration(nearestOption.value)
+  }
+
+  const handleDrag = (event: any, info: any) => {
+    const rect = event.currentTarget.parentElement?.getBoundingClientRect()
+    if (!rect) return
+    
+    const x = info.point.x - rect.left
+    const percentage = Math.max(0, Math.min(1, x / rect.width))
+    const newDuration = Math.round(60 + (percentage * 120)) // 60 to 180 range
+    
+    // Snap to nearest duration option
+    const nearestOption = durationOptions.reduce((prev, curr) => 
+      Math.abs(curr.value - newDuration) < Math.abs(prev.value - newDuration) ? curr : prev
+    )
+    setDuration(nearestOption.value)
+  }
+
+  const handleDragEnd = (event: any, info: any) => {
+    // Final snap to ensure exact duration value
+    const currentDuration = duration
+    const nearestOption = durationOptions.find(opt => Math.abs(opt.value - currentDuration) < 30)
+    if (nearestOption) {
+      setDuration(nearestOption.value)
     }
   }
 
@@ -133,9 +200,46 @@ export function Personalization({ onNext }: PersonalizationProps) {
           transition={{ duration: 0.6, delay: 0.23 }}
           className="mb-6"
         >
-          <label className="block text-sm font-semibold text-foreground mb-2">
+          {/* Header */}
+          <h2 className="text-2xl font-serif font-semibold text-foreground mb-4">
             Video Duration
-          </label>
+          </h2>
+          
+          {/* Recommendation Card */}
+          {durationRecommendation && !loadingRecommendation && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-primary/10 border border-primary/20 rounded-xl backdrop-blur-sm"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <span className="font-semibold text-primary">
+                  Recommended: {durationRecommendation.recommendation.recommended_label}
+                </span>
+              </div>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>{durationRecommendation.recommendation.word_count} words</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Wrench className="w-4 h-4" />
+                  <span>Technical complexity</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Loading state */}
+          {loadingRecommendation && (
+            <div className="mb-6 p-4 bg-muted/50 rounded-xl flex items-center gap-2">
+              <Clock className="w-4 h-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">Analyzing content...</span>
+            </div>
+          )}
+          
+          {/* Classic Duration Select Dropdown */}
           <select
             value={duration}
             onChange={(e) => setDuration(Number(e.target.value))}

@@ -1,13 +1,16 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono, Patrick_Hand } from 'next/font/google'
+import { Libre_Baskerville, Geist_Mono, Patrick_Hand } from 'next/font/google'
 import './globals.css'
 import { AppProvider } from '@/contexts/AppContext'
+import { AuthProvider } from '@/contexts/AuthContext'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 
-const _geist = Geist({ 
+const _libreBaskerville = Libre_Baskerville({ 
   subsets: ["latin"],
-  variable: "--font-geist"
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-libre-baskerville"
 });
 const _geistMono = Geist_Mono({ 
   subsets: ["latin"],
@@ -34,25 +37,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${_geist.variable} ${_geistMono.variable} ${_patrickHand.variable} font-sans antialiased`}>
-        {/* Aesthetic Background Elements */}
-        <div className="illumination illumination-1" />
-        <div className="illumination illumination-2" />
-        <div className="illumination illumination-3" />
-        <div className="futuristic-curves" />
-        <div className="grain-overlay" />
-        
+      <body className={`${_libreBaskerville.variable} ${_geistMono.variable} ${_patrickHand.variable} font-sans antialiased`}>
         <ThemeProvider
+          forcedTheme="dark"
           attribute="class"
           defaultTheme="dark"
           enableSystem={false}
           disableTransitionOnChange
-          forcedTheme="dark"
         >
-          <AppProvider>
-            {children}
-            <Toaster position="top-center" richColors />
-          </AppProvider>
+          <AuthProvider>
+            <AppProvider>
+              {children}
+              <Toaster position="top-center" richColors />
+            </AppProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

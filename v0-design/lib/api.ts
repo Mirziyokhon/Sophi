@@ -12,6 +12,27 @@ export interface ExtractResponse {
   content_type: string
 }
 
+export interface PDFPreview {
+  page_number: number
+  image_base64: string
+  width: number
+  height: number
+  error?: boolean
+}
+
+export interface PDFInfo {
+  page_count: number
+  title: string
+  author: string
+}
+
+export interface PDFInfoResponse {
+  success: boolean
+  pdf_info: PDFInfo
+  previews: PDFPreview[]
+  preview_count: number
+}
+
 export interface VideoGenerationRequest {
   extracted_text: string
   interest_description: string
@@ -30,8 +51,10 @@ export interface VideoData {
   summary?: string
   key_points?: string[]
   takeaway?: string
-  media_type?: 'html' | 'video'
+  media_type?: 'html_animation' | 'video'
   animation_html?: string
+  html_content?: string
+  html_url?: string
   subtitle_path?: string
   subtitle_url?: string
 }
@@ -45,6 +68,27 @@ export interface VideoGenerationResponse {
     takeaway: string
     script: string
   }
+}
+
+export interface DurationRecommendationResponse {
+  success: boolean
+  recommendation: {
+    recommended_duration: number
+    recommended_label: string
+    word_count: number
+    complexity_score: number
+    reasons: string[]
+    speaking_rate_estimate: number
+    all_options: number[]
+  }
+  quality_scores: Array<{
+    duration: number
+    quality_score: number
+    rating: string
+    color: string
+    feedback: string
+    is_recommended: boolean
+  }>
 }
 
 export interface LibraryResponse {
@@ -94,11 +138,32 @@ class SophiAPI {
   }
 
   /**
-   * Extract text from PDF
+   * Get PDF info and previews
    */
-  async extractPDF(file: File): Promise<ExtractResponse> {
+  async getPDFInfo(file: File): Promise<PDFInfoResponse> {
     const formData = new FormData()
     formData.append('file', file)
+
+    const response = await fetch(`${this.baseURL}/api/pdf/info`, {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to get PDF info')
+    }
+
+    return response.json()
+  }
+
+  /**
+   * Extract text from PDF with page selection
+   */
+  async extractPDF(file: File, pages: string | number = 'all'): Promise<ExtractResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('pages', pages.toString())
 
     const response = await fetch(`${this.baseURL}/api/extract/pdf`, {
       method: 'POST',
@@ -188,6 +253,26 @@ class SophiAPI {
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.detail || 'Failed to generate video')
+    }
+
+    return response.json()
+  }
+
+  /**
+   * Get intelligent duration recommendation
+   */
+  async getDurationRecommendation(text: string): Promise<DurationRecommendationResponse> {
+    const response = await fetch(`${this.baseURL}/api/recommend-duration`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to get duration recommendation')
     }
 
     return response.json()
