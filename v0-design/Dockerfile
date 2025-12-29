@@ -9,6 +9,9 @@ RUN npm ci
 # Copy source
 COPY . .
 
+# Remove local-only env overrides so production build uses Cloud Run backend
+RUN rm -f .env.local
+
 # Build Next.js app
 RUN npm run build
 
