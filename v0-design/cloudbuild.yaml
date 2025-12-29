@@ -1,0 +1,32 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - europe-west1-docker.pkg.dev/gen-lang-client-0627549716/cloud-run-source-deploy/sophi/frontend
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - europe-west1-docker.pkg.dev/gen-lang-client-0627549716/cloud-run-source-deploy/sophi/frontend
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - sophi-frontend
+      - --image
+      - europe-west1-docker.pkg.dev/gen-lang-client-0627549716/cloud-run-source-deploy/sophi/frontend
+      - --platform
+      - managed
+      - --region
+      - europe-west1
+      - --allow-unauthenticated
+      - --memory
+      - 1Gi
+      - --cpu
+      - "1"
+      - --set-env-vars
+      - NEXT_PUBLIC_API_URL=https://sophi-1115776966.europe-west1.run.app
+images:
+  - europe-west1-docker.pkg.dev/gen-lang-client-0627549716/cloud-run-source-deploy/sophi/frontend
