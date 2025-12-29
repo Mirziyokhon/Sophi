@@ -28,13 +28,20 @@ from utils.duration_recommender import DurationRecommender
 app = FastAPI(title="Sophi API", version="1.0.0")
 
 # CORS configuration for Next.js frontend
+frontend_origin = os.getenv(
+    "FRONTEND_URL",
+    "https://sophi-frontend-1115776966.europe-west1.run.app",
+)
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    frontend_origin,
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
