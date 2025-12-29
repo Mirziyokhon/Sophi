@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { BackgroundGrid } from './background-grid'
-import { Footer } from './footer'
 import { ArrowRight } from 'lucide-react'
 
 
@@ -1024,7 +1023,6 @@ export function Landing({ onStart }: LandingProps) {
         }
       `}</style>
       </div>
-      <Footer />
     </div>
       </div>
   )

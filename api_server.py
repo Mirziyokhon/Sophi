@@ -451,7 +451,11 @@ async def generate_video(request: VideoGenerationRequest, http_request: Request)
                     'media_type': 'html_animation'
                 }
         else:
-            video_generator = VideoGenerator(use_manim=True)
+            # Manim requires heavy system dependencies (LaTeX/FFmpeg) that
+            # aren't available in the lightweight Cloud Run container, so we
+            # disable it in production and rely on the HTML/placeholder
+            # pipeline instead.
+            video_generator = VideoGenerator(use_manim=False)
             video_result = video_generator.generate_complete_video(
                 processed_content['script'],
                 processed_content['visual_prompts'],

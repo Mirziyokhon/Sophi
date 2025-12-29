@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     tesseract-ocr \
     libtesseract-dev \
+    poppler-utils \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,12 +21,13 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p uploads videos temp
 
-# Expose port
-EXPOSE 8501
+# Expose Cloud Run port
+ENV PORT=8080
+EXPOSE 8080
 
-# Health check
+# Health check hits FastAPI
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+    CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
-# Run the application - NO SINGLE QUOTES, PORT EXPANSION WORKS
-CMD python health_server.py & streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+# Start FastAPI backend
+CMD uvicorn api_server:app --host 0.0.0.0 --port ${PORT}

@@ -16,7 +16,6 @@ from moviepy.editor import (
 )
 from elevenlabs.client import ElevenLabs
 import config
-from utils.manim_generator import ManimGenerator
 
 
 class VideoGenerator:
@@ -31,10 +30,16 @@ class VideoGenerator:
         self.stability_key = config.STABILITY_API_KEY
         self.pika_key = config.PIKA_API_KEY
         self.use_manim = use_manim
+        self.manim_generator = None
         
-        # Initialize Manim generator if requested
+        # Initialize Manim generator if explicitly requested and available
         if self.use_manim:
-            self.manim_generator = ManimGenerator()
+            try:
+                from utils.manim_generator import ManimGenerator  # local import to avoid heavy deps
+                self.manim_generator = ManimGenerator()
+            except Exception as exc:
+                print(f"⚠️ Manim unavailable in this environment ({exc}); falling back to placeholder pipeline.")
+                self.use_manim = False
         
         if self.elevenlabs_key:
             self.elevenlabs_client = ElevenLabs(api_key=self.elevenlabs_key)
