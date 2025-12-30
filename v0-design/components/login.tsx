@@ -4,6 +4,9 @@ import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { Header } from './header'
 import { BackgroundGrid } from './background-grid'
+import { useAuth } from '@/contexts/AuthContext'
+import { toast } from 'sonner'
+import { GoogleSignInButton } from '@/components/auth/google-signin-button'
 
 interface LoginProps {
   onSuccess?: () => void
@@ -15,33 +18,44 @@ interface LoginProps {
   onNavigateToStart?: () => void
 }
 
-export function Login({ 
-  onSuccess, 
-  onSwitchToSignup, 
-  onHome, 
-  onNavigateToLibrary, 
-  onNavigateToPricing, 
+export function Login({
+  onSuccess,
+  onSwitchToSignup,
+  onHome,
+  onNavigateToLibrary,
+  onNavigateToPricing,
   onNavigateToContact,
-  onNavigateToStart 
+  onNavigateToStart,
 }: LoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const { signIn } = useAuth()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setTimeout(() => {
+
+    try {
+      const result = await signIn(email, password)
+      if (result.success) {
+        toast.success('Signed in successfully!')
+        onSuccess?.()
+      } else {
+        toast.error(result.error ?? 'Unable to sign in. Please try again.')
+      }
+    } catch (error) {
+      toast.error('An unexpected error occurred. Please try again.')
+    } finally {
       setLoading(false)
-      onSuccess?.()
-    }, 1000)
+    }
   }
 
   return (
     <div className="min-h-screen text-[#F4EEE9] font-sans selection:bg-[#cfaa32]/30 overflow-x-hidden relative">
       <BackgroundGrid />
-      
-      <Header 
+
+      <Header
         onLogoClick={onHome || (() => {})}
         onNavigateToLibrary={onNavigateToLibrary || (() => {})}
         onNavigateToLogin={() => {}}
@@ -92,7 +106,7 @@ export function Login({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 bg-[#F4EEE9] text-[#1a0509] font-bold rounded-xl hover:bg-white shadow-lg hover:shadow-[#cfaa32]/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
+                className="w-full py-4 bg-[#F4EEE9] text-[#1a0509] font-bold rounded-xl hover:bg.white shadow-lg hover:shadow-[#cfaa32]/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
               >
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
@@ -108,17 +122,15 @@ export function Login({
             </div>
 
             <div className="space-y-2">
-              <button className="w-full py-3 border border-[#F4EEE9]/20 rounded-xl hover:bg-[#F4EEE9]/5 text-[#F4EEE9] transition-all cursor-pointer flex items-center justify-center gap-2 font-medium">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
-                </svg>
-                Continue with Google
-              </button>
+              <GoogleSignInButton text="Continue with Google" />
             </div>
 
             <div className="text-center text-sm">
               <span className="text-[#F4EEE9]/60">Don't have an account? </span>
-              <button onClick={onSwitchToSignup} className="text-[#cfaa32] hover:text-[#deb63d] hover:underline cursor-pointer font-semibold transition-colors">
+              <button
+                onClick={onSwitchToSignup}
+                className="text-[#cfaa32] hover:text-[#deb63d] hover:underline cursor-pointer font-semibold transition-colors"
+              >
                 Sign up
               </button>
             </div>

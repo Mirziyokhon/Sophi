@@ -21,11 +21,15 @@ declare global {
 interface GoogleSignInButtonProps {
   text?: string
   className?: string
+  onSuccess?: () => void
+  onError?: (message?: string) => void
 }
 
 export function GoogleSignInButton({
   text = 'Continue with Google',
   className = '',
+  onSuccess,
+  onError,
 }: GoogleSignInButtonProps) {
   const { googleSignIn } = useAuth()
   const [scriptLoaded, setScriptLoaded] = useState(false)
@@ -50,11 +54,15 @@ export function GoogleSignInButton({
 
   const handleGoogleLogin = () => {
     if (!clientId) {
-      toast.error('Google Client ID is not configured.')
+      const message = 'Google Client ID is not configured.'
+      toast.error(message)
+      onError?.(message)
       return
     }
     if (!scriptLoaded || typeof window === 'undefined' || !window.google?.accounts?.id) {
-      toast.error('Google auth is not ready yet. Please try again.')
+      const message = 'Google auth is not ready yet. Please try again.'
+      toast.error(message)
+      onError?.(message)
       return
     }
 
@@ -64,15 +72,20 @@ export function GoogleSignInButton({
         client_id: clientId,
         callback: async ({ credential }) => {
           if (!credential) {
-            toast.error('Google login failed. Please try again.')
+            const message = 'Google login failed. Please try again.'
+            toast.error(message)
+            onError?.(message)
             setIsLoading(false)
             return
           }
           const result = await googleSignIn(credential)
           if (result.success) {
             toast.success('Signed in with Google')
+            onSuccess?.()
           } else {
-            toast.error(result.error || 'Google sign-in failed')
+            const message = result.error || 'Google sign-in failed'
+            toast.error(message)
+            onError?.(message)
           }
           setIsLoading(false)
         },
@@ -80,7 +93,9 @@ export function GoogleSignInButton({
       window.google.accounts.id.prompt(() => setIsLoading(false))
     } catch (error) {
       console.error(error)
-      toast.error('Unable to start Google sign-in')
+      const message = 'Unable to start Google sign-in'
+      toast.error(message)
+      onError?.(message)
       setIsLoading(false)
     }
   }

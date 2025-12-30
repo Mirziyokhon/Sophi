@@ -13,8 +13,6 @@ import { Personalization } from '@/components/personalization'
 import { Processing } from '@/components/processing'
 import { Player } from '@/components/player'
 import { Library } from '@/components/library'
-import { Login } from '@/components/login'
-import { Signup } from '@/components/signup'
 import { BackgroundGrid } from '@/components/background-grid'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -34,7 +32,15 @@ export default function Home() {
     }
   }, [user, isLoading])
 
-  const handleStartLearning = () => setScreen('upload')
+  const redirectToCreation = (message?: string) => {
+    setVideoGenerated(false)
+    setScreen('upload')
+    if (message) {
+      toast.info(message)
+    }
+  }
+
+  const handleStartLearning = () => redirectToCreation()
   const handleUploadNext = () => setScreen('personalization')
   const handlePersonalizationNext = () => setScreen('processing')
   const handleProcessingComplete = () => {
@@ -56,8 +62,10 @@ export default function Home() {
   const handleNavigateToLibrary = () => setScreen('library')
   const handleBackToLibrary = () => setScreen('library')
   
-  const handleNavigateToLogin = () => setScreen('login')
-  const handleNavigateToSignup = () => setScreen('signup')
+  const handleNavigateToLogin = () =>
+    redirectToCreation('Account creation is temporarily paused. Jumping straight to the video builder.')
+  const handleNavigateToSignup = () =>
+    redirectToCreation('Account creation is temporarily paused. Jumping straight to the video builder.')
 
   const handleNavigateToStart = () => {
     setScreen('landing')
@@ -94,7 +102,7 @@ export default function Home() {
         <BackgroundGrid />
       </div>
       <div className="relative z-20">
-        {(!user || screen === 'login' || screen === 'signup' || screen === 'landing') ? (
+        {(!user || screen === 'landing') ? (
           // Public views with header
           <div className="flex flex-col flex-grow min-h-screen">
             {screen !== 'login' && screen !== 'signup' && (
@@ -109,28 +117,8 @@ export default function Home() {
               />
             )}
 
-            <main className={`flex-grow ${screen !== 'login' && screen !== 'signup' ? 'pt-32' : ''}`}>
+            <main className="flex-grow pt-32">
               {screen === 'landing' && <Landing onStart={handleStartLearning} />}
-              {screen === 'login' && (
-                <Login
-                  onSuccess={() => setScreen('dashboard')}
-                  onSwitchToSignup={handleNavigateToSignup}
-                  onHome={handleLogoClick}
-                  onNavigateToLibrary={handleNavigateToLibrary}
-                  onNavigateToContact={handleNavigateToContact}
-                  onNavigateToStart={handleNavigateToStart}
-                />
-              )}
-              {screen === 'signup' && (
-                <Signup
-                  onSuccess={() => setScreen('dashboard')}
-                  onSwitchToLogin={handleNavigateToLogin}
-                  onHome={handleLogoClick}
-                  onNavigateToLibrary={handleNavigateToLibrary}
-                  onNavigateToContact={handleNavigateToContact}
-                  onNavigateToStart={handleNavigateToStart}
-                />
-              )}
             </main>
             <Footer />
           </div>

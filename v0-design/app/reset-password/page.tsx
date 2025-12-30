@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { BackgroundGrid } from '@/components/background-grid'
@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams()
   const initialToken = useMemo(() => searchParams.get('token') ?? '', [searchParams])
   const [token, setToken] = useState(initialToken)
@@ -144,5 +144,22 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#050304] text-[#F4EEE9]">
+          <div className="flex items-center gap-3 text-lg">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading reset form...
+          </div>
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   )
 }

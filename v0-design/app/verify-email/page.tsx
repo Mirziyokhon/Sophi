@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { BackgroundGrid } from '@/components/background-grid'
 import { useAuth } from '@/contexts/AuthContext'
+import Link from 'next/link'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, RefreshCcw } from 'lucide-react'
 
 type Status = 'idle' | 'verifying' | 'success' | 'error'
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams()
   const prefilledToken = useMemo(() => searchParams.get('token') ?? '', [searchParams])
   const { verifyEmail } = useAuth()
@@ -131,5 +131,22 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#050304] text-[#F4EEE9]">
+          <div className="flex items-center gap-3 text-lg">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading verification form...
+          </div>
+        </div>
+      }
+    >
+      <VerifyEmailContent />
+    </Suspense>
   )
 }
