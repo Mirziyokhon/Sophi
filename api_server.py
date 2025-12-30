@@ -26,7 +26,7 @@ from utils.sketch_animator import SketchAnimator
 from utils.queue_handler import request_queue, user_rate_limiter
 from utils.duration_recommender import DurationRecommender
 from auth.router import router as auth_router
-from auth.dependencies import require_current_user, require_verified_user
+from auth.dependencies import require_current_user, require_verified_user, get_optional_user
 
 app = FastAPI(title="Sophi API", version="1.0.0")
 
@@ -293,11 +293,15 @@ async def recommend_duration(request: dict):
 async def _generate_video_logic(
     request: VideoGenerationRequest,
     http_request: Request,
-    current_user: models.User,
+    current_user: Optional[models.User],
 ):
     """Generate personalized learning video with rate limiting and queue management"""
     try:
-        user_id = str(current_user.id)
+        user_id = (
+            str(current_user.id)
+            if current_user
+            else f"anon:{http_request.client.host if http_request.client else 'unknown'}"
+        )
 
         # Check user rate limit
         can_proceed, error_msg = user_rate_limiter.can_make_request(user_id)
@@ -529,7 +533,7 @@ async def _generate_video_logic(
 async def generate_video(
     request: VideoGenerationRequest,
     http_request: Request,
-    current_user: models.User = Depends(require_verified_user),
+    current_user: Optional[models.User] = Depends(get_optional_user),
 ):
     return await _generate_video_logic(request, http_request, current_user)
 
@@ -538,7 +542,7 @@ async def generate_video(
 async def generate_mp4_video(
     request: VideoGenerationRequest,
     http_request: Request,
-    current_user: models.User = Depends(require_verified_user),
+    current_user: Optional[models.User] = Depends(get_optional_user),
 ):
     return await _generate_video_logic(request, http_request, current_user)
 
