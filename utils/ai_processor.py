@@ -70,6 +70,34 @@ class AIProcessor:
         # Extract a preview from the input text
         preview = text[:100] if text else "sample content"
         
+        mock_narrations = [
+            "Let's begin by introducing the main concept.",
+            "Here's how the first principle works in practice.",
+            "Now let's connect this to the second important idea.",
+            "Notice how these elements interact and support each other."
+        ]
+        mock_visuals = [
+            "Opening scene with title and key visual elements",
+            "Visualization showing the first key concept",
+            "Diagram showing connections between concepts",
+            "Interactive visualization of concept relationships"
+        ]
+        total_duration = max(30, duration or 60)
+        per_segment = round(total_duration / len(mock_narrations), 2)
+        timeline_segments = []
+        for idx, (narration, visual) in enumerate(zip(mock_narrations, mock_visuals)):
+            start = round(idx * per_segment, 2)
+            end = round(min(total_duration, start + per_segment), 2)
+            timeline_segments.append({
+                'scene_id': idx + 1,
+                'start': start,
+                'end': end,
+                'text': narration,
+                'scene': visual,
+                'narration': narration,
+                'visual_prompt': visual
+            })
+
         return {
             'summary': f"This educational content explores key concepts from: {preview}... The material covers fundamental principles and practical applications.",
             'key_points': [
@@ -81,38 +109,9 @@ class AIProcessor:
             ],
             'script': f"Welcome to this educational video! Today we're exploring an important topic. {preview}... Let's break down these concepts step by step and see how they connect to create a complete understanding.",
             'takeaway': "The key insight is understanding how these concepts work together to form a cohesive whole. Apply this knowledge to deepen your understanding.",
-            'scene_details': [
-                {
-                    'scene_number': 0,
-                    'start_ratio': 0.0,
-                    'narration': "Let's begin by introducing the main concept.",
-                    'visual_prompt': "Opening scene with title and key visual elements"
-                },
-                {
-                    'scene_number': 1,
-                    'start_ratio': 0.2,
-                    'narration': "Here's how the first principle works in practice.",
-                    'visual_prompt': "Visualization showing the first key concept"
-                },
-                {
-                    'scene_number': 2,
-                    'start_ratio': 0.4,
-                    'narration': "Now let's connect this to the second important idea.",
-                    'visual_prompt': "Diagram showing connections between concepts"
-                },
-                {
-                    'scene_number': 3,
-                    'start_ratio': 0.6,
-                    'narration': "Notice how these elements interact and support each other.",
-                    'visual_prompt': "Interactive visualization of concept relationships"
-                },
-                {
-                    'scene_number': 4,
-                    'start_ratio': 0.8,
-                    'narration': "This brings us to the key insight and practical application.",
-                    'visual_prompt': "Summary scene with main takeaway and call to action"
-                }
-            ],
+            'scene_details': timeline_segments,
+            'timeline_segments': timeline_segments,
+            'total_duration': total_duration,
             'visual_prompts': [
                 "Hand-drawn sketch illustrating the main concept with clear labels",
                 "Diagram showing step-by-step process flow",
@@ -171,13 +170,23 @@ Learning Style: Direct, straightforward explanations using common experiences an
             "Diagram of glucose traveling through the plant while oxygen bubbles drift upward"
         ]
 
+        total_segments = min(len(points), len(scene_visuals))
+        total_segments = max(1, total_segments)
+        segment_duration = max(4.0, target_duration / max(total_segments, 1))
+        current_start = 0.0
+
         for idx, point in enumerate(points[:3]):
             narration = f"{hook if idx == 0 else ''} {point}."
             narration = narration.strip()
             script_sections.append(narration)
             visual_prompt = scene_visuals[idx] if idx < len(scene_visuals) else f"Illustrate {point} with real-world plant imagery"
+            start_time = round(current_start, 2)
+            end_time = round(start_time + segment_duration, 2)
+            current_start = end_time
             scenes.append({
                 'scene_id': idx + 1,
+                'start': start_time,
+                'end': end_time,
                 'narration': narration,
                 'visual_prompt': visual_prompt
             })
@@ -186,7 +195,8 @@ Learning Style: Direct, straightforward explanations using common experiences an
 
         return {
             'script': ' '.join(script_sections).strip(),
-            'scenes': scenes
+            'scenes': scenes,
+            'total_duration': round(current_start, 2)
         }
 
     def _clean_script_text(self, script: str) -> str:
@@ -314,7 +324,78 @@ Learning Style: Direct, straightforward explanations using common experiences an
 
         return random.choice(motions)
 
-    
+    def _normalize_timed_segments(self, segments: list, target_duration: int) -> list[dict]:
+        """Ensure narration segments contain monotonic timestamps and realistic pacing."""
+        if not segments:
+            return []
+
+        sanitized = []
+        safe_duration = max(10.0, float(target_duration or 60))
+        approx = max(3.5, safe_duration / max(1, len(segments)))
+        current_time = 0.0
+
+        for idx, raw in enumerate(segments):
+            narration = self._clean_script_text(raw.get('text') or raw.get('narration') or '')
+            if not narration:
+                continue
+
+            visual = (raw.get('scene') or raw.get('visual_prompt') or raw.get('visual') or narration).strip()
+            start_val = raw.get('start')
+            end_val = raw.get('end')
+            duration_val = raw.get('duration')
+
+            def _to_float(value, fallback=None):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return fallback
+
+            start = _to_float(start_val, None)
+            end = _to_float(end_val, None)
+            duration = _to_float(duration_val, None)
+
+            if start is None:
+                start = current_time
+            else:
+                start = max(0.0, start)
+
+            if end is None:
+                if duration and duration > 0:
+                    end = start + duration
+                else:
+                    end = start + approx
+            if end <= start:
+                end = start + max(1.2, duration or approx)
+
+            # Clamp to safe duration and keep monotonic progression
+            if start < current_time:
+                start = current_time
+            end = min(end, safe_duration)
+            if end <= start:
+                end = start + 1.2
+            current_time = end
+
+            sanitized.append({
+                'scene_id': raw.get('scene_id', idx + 1),
+                'start': round(start, 3),
+                'end': round(end, 3),
+                'text': narration,
+                'narration': narration,
+                'visual_prompt': self._enrich_visual_prompt(narration, visual),
+                'scene': visual,
+                'max_syllables': raw.get('max_syllables'),
+                'word_count': raw.get('word_count')
+            })
+
+        if not sanitized:
+            return []
+
+        # Ensure final timestamp hits requested duration (within tolerance)
+        if sanitized[-1]['end'] < safe_duration:
+            sanitized[-1]['end'] = round(safe_duration, 3)
+
+        return sanitized
+
     def enhance_interest_profile(self, interest_description: str) -> str:
         """
         Enhance user's interest description into structured learning profile
@@ -449,19 +530,7 @@ TAKEAWAY: [memorable conclusion]"""
         """
         target_words = int((target_duration / 60) * 150)
         
-        scene_json_example = """{
-  "script": "Full voiceover text joining every scene together with smooth transitions.",
-  "scenes": [
-    {
-      "scene_id": 1,
-      "timestamp": "0-10s",
-      "narration": "Only the lines spoken during this beat (no repetition).",
-      "visual_prompt": "Specific visual: e.g., macro shot of sunlight pouring into chloroplasts inside a leaf."
-    }
-  ]
-}"""
-
-        prompt = f"""You are an educational storyteller and art director. Create an engaging {target_duration}-second narration AND a scene-by-scene visual plan.
+        prompt = f"""You are an educational storyteller and animation director. Produce a timestamp-locked narration plan for a {target_duration}-second video.
 
 CONTENT SUMMARY:
 {summary_data['summary']}
@@ -475,23 +544,28 @@ TAKEAWAY:
 STUDENT'S INTERESTS:
 {interest_profile}
 
-Create a narration that:
-1. Opens with a vivid hook tied to the student's interests
-2. Introduces new information every sentence (no repetition or looping)
-3. Highlights what the viewer should be picturing each moment (sunlight hitting leaves, close-ups of plant cells, energy transfer, etc.)
-4. Ends with an inspiring call-to-action tied to the takeaway
+RULES (non-negotiable):
+1. Return STRICT JSON (no markdown) with this exact schema:
+{{
+  "total_duration": <float seconds>,
+  "segments": [
+    {{
+      "scene_id": 1,
+      "start": 0.0,
+      "end": 4.2,
+      "text": "Narration for this beat.",
+      "scene": "Detailed visual description tightly tied to narration.",
+      "max_syllables": 28,
+      "word_count": 18
+    }}
+  ]
+}}
+2. Timestamps must be strictly increasing, cover the full duration, and never overlap or exceed total_duration.
+3. Each segment's text must be unique, high-energy, and directly reference what should appear on screen.
+4. "scene" must describe realistic props, camera direction, and annotations that match the text.
+5. Provide 4-8 segments so that each lasts between 3 and 10 seconds.
 
-Then break the narration into a JSON document with this exact shape:
-```
-{scene_json_example}
-```
-
-Guidelines for scenes:
-- The visual prompt must describe realistic subject-matter (plants, sunlight, cells, molecules) and avoid abstract shapes unless necessary.
-- Each scene should focus on a different moment of the process (light capture, chemical reactions, energy storage, real-world impact, etc.).
-- Ensure scene narration segments do not repeat sentences from previous scenes.
-
-Return ONLY the JSON (no markdown, no commentary)."""
+Return ONLY the JSON described above."""
 
         try:
             raw_response = self._generate_with_retry(prompt)
@@ -507,38 +581,23 @@ Return ONLY the JSON (no markdown, no commentary)."""
                 }
 
             if not isinstance(structured, dict):
-                structured = {'script': str(structured), 'scenes': []}
+                structured = {'segments': []}
 
-            narration_segments = [scene.get('narration', '') for scene in structured.get('scenes', []) if scene.get('narration')]
-            if narration_segments:
-                structured['script'] = ' '.join(narration_segments)
-            structured['script'] = self._clean_script_text(structured.get('script', ''))
-            structured['script'] = self._dedupe_sentences(structured['script'])
+            segments = structured.get('segments') or structured.get('scenes') or []
+            timeline_segments = self._normalize_timed_segments(segments, target_duration)
+            if not timeline_segments:
+                raise ValueError("Timeline segments missing or empty.")
 
-            # Normalize scenes
-            normalized_scenes = []
-            for idx, scene in enumerate(structured.get('scenes', []), start=1):
-                narration = self._clean_script_text(scene.get('narration', ''))
-                if not narration:
-                    continue
-                visual_prompt = scene.get('visual_prompt') or "Use concrete imagery of the concept in action"
-                normalized_scenes.append({
-                    'scene_id': scene.get('scene_id', idx),
-                    'timestamp': scene.get('timestamp', ''),
-                    'narration': narration,
-                    'visual_prompt': visual_prompt.strip()
-                })
-
-            structured['scenes'] = normalized_scenes
-            if not structured['scenes'] and structured.get('script'):
-                structured['scenes'] = [
-                    {
-                        'scene_id': 1,
-                        'narration': structured['script'],
-                        'visual_prompt': structured['script']
-                    }
-                ]
-            return structured
+            script_text = ' '.join(seg['narration'] for seg in timeline_segments if seg.get('narration'))
+            structured_result = {
+                'script': self._dedupe_sentences(self._clean_script_text(script_text)),
+                'scenes': timeline_segments,
+                'scene_details': timeline_segments,
+                'timeline_segments': timeline_segments,
+                'visual_prompts': [seg['visual_prompt'] for seg in timeline_segments],
+                'total_duration': timeline_segments[-1]['end']
+            }
+            return structured_result
         except RateLimitError:
             print("⚠️ Gemini rate limit for script. Using template-based narration.")
             return self._fallback_script(summary_data, interest_profile, target_duration)
@@ -630,6 +689,21 @@ etc."""
         print(f"🎨 Creating UNIQUE animation (session: {unique_session}, style: {random_style[:30]}...)")
         
         scenes = processed_content.get('scene_details', [])
+        timeline_segments = processed_content.get('timeline_segments') or scenes
+        if not timeline_segments:
+            rough_segments = [
+                {
+                    'scene_id': idx + 1,
+                    'start': idx * (duration_seconds / max(1, len(key_points))),
+                    'end': (idx + 1) * (duration_seconds / max(1, len(key_points))),
+                    'text': point,
+                    'scene': point,
+                    'visual_prompt': point,
+                }
+                for idx, point in enumerate(key_points[:4])
+            ]
+            timeline_segments = self._normalize_timed_segments(rough_segments, duration_seconds)
+        timeline_json = json.dumps(timeline_segments[:12], indent=2, ensure_ascii=False)
         script_text = processed_content.get('script', '')
         summary = processed_content.get('summary', '')
         key_points = processed_content.get('key_points', [])
@@ -658,6 +732,14 @@ You are creating a {duration_seconds}-second educational animation by writing HT
 ## SESSION: {unique_session} | {timestamp}
 **IMPORTANT: Create the ENTIRE animation from scratch - no predefined objects!**
 
+## AUTHORITATIVE TIMELINE – DO NOT DEVIATE
+{timeline_json}
+
+Rules:
+- You MUST use these start/end timestamps verbatim. No guessing, no re-timing.
+- Each segment's narration text maps 1:1 with the captions you render.
+- Each scene description must be drawn exactly as specified in its "scene" field.
+
 ## STYLE LOCK – SKETCHBOOK SCRIBBLE ONLY
 - ALWAYS use hand-drawn pencil/ink strokes with visible jitter and textured paper backgrounds
 - Layer multiple sketch elements (foreground doodles, mid-ground diagrams, background notebook grids)
@@ -670,10 +752,11 @@ You are creating a {duration_seconds}-second educational animation by writing HT
 **Colors:** Primary: {random_palette['primary']}, Secondary: {random_palette['secondary']}, Accent: {random_palette['accent']}
 
 ## PACING + CAPTIONS
-- Break narration into micro-beats of 1–3 seconds; no caption stays longer than 3s
+- Drive animation via GSAP timeline using absolute seconds from the authoritative segments.
+- Example: timeline.to(scene1, {{ opacity: 1 }}, 0).to(scene1, {{ opacity: 0 }}, 4.2)
 - Keep multiple elements moving simultaneously (scribble reveals, morphing diagrams, bouncing arrows)
 - Highlight important words with animated underlines, circling strokes, or marker highlights
-- Ensure captions in #captions update in lockstep with audio timing metadata you provide
+- Update #captions strictly by segment timestamps (no inferred delays)
 
 ## SCENE REALISM
 - Each beat should describe a believable scene (camera angle, lighting, materials, background context)
@@ -805,10 +888,10 @@ Use this structure as a starting point:
 2. **Creative Animations** - Use SVG paths, canvas, CSS keyframes, GSAP
 3. **Unique Visual Metaphors** - Don't use standard shapes unless creatively modified
 4. **GSAP Timeline** - Use GSAP for smooth animations and timing
-5. **Captions** - Update #captions div with narration text throughout the animation
-6. **Duration** - CRITICAL: Animation MUST last exactly {duration_seconds} seconds. Spread timeline events evenly across the full duration.
+5. **Caption Sync** - Update #captions exactly at each segment's start time and clear/fade at segment end.
+6. **Duration** - CRITICAL: Animation MUST last exactly {duration_seconds} seconds. The GSAP timeline end must equal the final segment end.
 7. **Responsive** - Elements should be positioned absolutely within the stage
-8. **Caption Text Array** - MUST include a JavaScript array named 'texts' or 'captions' with all narration text for TTS generation
+8. **Timeline Data** - Include a JavaScript array named `timelineSegments` mirroring the provided JSON so QA can verify alignment.
 9. **SMOOTH CONCLUSION** - CRITICAL: Animation MUST have a proper ending sequence:
    - Reserve last 3-5 seconds for conclusion
    - Add final summary caption or key takeaway message
@@ -837,6 +920,13 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
             
             # Try Gemini 3 Pro first, fall back to 2.0 Flash if not available
             model_options = ['gemini-3-pro-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-pro']
+            if html_content:
+                with open(html_filename, "w", encoding="utf-8") as html_file:
+                    html_file.write(html_content)
+                result['html_path'] = str(html_filename)
+                print(f"✅ HTML animation saved to {html_filename}")
+            else:
+                print("⚠️ No HTML animation content to save.")
             json_data = None
             last_error = None
             
@@ -965,67 +1055,7 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
             if "setup" not in scene_data or "timeline" not in scene_data:
                 raise ValueError("Invalid JSON structure: missing setup or timeline")
             
-            # Validate ID integrity
-            setup_ids = set()
-            for setup_action in scene_data.get('setup', []):
-                if 'params' in setup_action and len(setup_action['params']) > 0:
-                    setup_ids.add(setup_action['params'][0])
-            
-            missing_ids = []
-            for timeline_event in scene_data.get('timeline', []):
-                for id_field in ['target', 'from', 'to']:
-                    if id_field in timeline_event:
-                        ref_id = timeline_event[id_field]
-                        if ref_id and ref_id not in setup_ids:
-                            missing_ids.append(f"{id_field}='{ref_id}' at t={timeline_event.get('t', '?')}")
-            
-            if missing_ids:
-                error_msg = f"ID validation failed: {', '.join(missing_ids[:3])} not found in setup"
-                print(f"⚠️ {error_msg}")
-                print(f"   Available IDs: {setup_ids}")
-                raise ValueError(error_msg)
-            
-            print(f"✅ Generated animation with {len(scene_data.get('setup', []))} setup actions and {len(scene_data.get('timeline', []))} timeline events")
-            print(f"   Setup IDs: {setup_ids}")
-            
-            # Generate TTS narration from timeline captions
-            audio_data_uri = None
-            try:
-                audio_output_path = Path(config.TEMP_DIR) / f"narration_{int(time.time())}.mp3"
-                audio_output_path.parent.mkdir(parents=True, exist_ok=True)
-                audio_data_uri = self._generate_timeline_narration(
-                    scene_data.get('timeline', []), 
-                    audio_output_path,
-                    duration_seconds
-                )
-                if audio_output_path.exists():
-                    audio_output_path.unlink()
-            except Exception as e:
-                print(f"⚠️ TTS generation skipped: {e}")
-            
-            # Load GSAP template and inject JSON
-            template_path = "utils/animation_engine_template.html"
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    html_template = f.read()
-            except FileNotFoundError:
-                print(f"⚠️ Template not found at {template_path}, using fallback")
-                return self._build_fallback_html(processed_content, duration_seconds)
-            
-            # Inject JSON data and audio into template
-            safe_json = json.dumps(scene_data, ensure_ascii=False, indent=2)
-            html = html_template.replace('{{SCENE_DATA_JSON}}', safe_json)
-            
-            if audio_data_uri:
-                html = html.replace('{{AUDIO_DATA_URI}}', audio_data_uri)
-                print(f"✅ Generated JSON-driven GSAP animation with TTS narration")
-            else:
-                html = html.replace('{{AUDIO_DATA_URI}}', '')
-                print(f"✅ Generated JSON-driven GSAP animation (no audio)")
-            
-            print(f"✅ Unique animation generated (no caching - fresh every time)")
-            
-            return html
+            raise ValueError("Gemini returned JSON timeline instead of HTML; regenerate.")
             
         except Exception as e:
             import traceback
@@ -1037,50 +1067,67 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
             return self._build_fallback_html(processed_content, duration_seconds)
 
     def _generate_timeline_narration(self, timeline_events: list, output_path: Path, target_duration: int = 60) -> Optional[str]:
-        """Generate synchronized TTS audio from timeline captions and return base64 data URI."""
+        """Generate TTS audio per segment, stitch sequentially, and return data URI."""
         try:
-            # Combine all timeline text into a single narration script
-            narration_segments = []
-            for event in timeline_events:
-                text = event.get('text', '').strip()
-                if text:
-                    narration_segments.append(text)
-            
-            if not narration_segments:
-                print("⚠️ No narration text found in timeline")
+            normalized_events = self._normalize_timed_segments(timeline_events, target_duration)
+            if not normalized_events:
+                print("⚠️ No timeline segments available for TTS generation")
                 return None
-            
-            full_script = ' '.join(narration_segments)
-            print(f"🎤 Generating TTS narration ({len(full_script)} chars)...")
-            
-            # Use Edge-TTS to generate audio - English US Male voice
-            voice = "en-US-GuyNeural"  # Clear English US Male voice
-            
-            async def _synthesize():
-                await self._stream_tts_to_file(full_script, voice, output_path)
-            
-            # Run async TTS generation
-            self._run_async_task(_synthesize)
-            
-            # Ensure audio reaches target duration by padding if needed
-            if output_path.exists():
-                self._extend_audio_duration(output_path, target_duration)
-            
-            # Verify file was created
-            if not output_path.exists() or output_path.stat().st_size == 0:
-                print("⚠️ TTS generation failed or produced empty file")
-                return None
-            
-            # Read audio file and convert to base64 data URI
-            with open(output_path, 'rb') as f:
-                audio_bytes = f.read()
-            
-            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-            data_uri = f"data:audio/mpeg;base64,{audio_base64}"
-            
-            print(f"✅ TTS narration generated ({len(audio_bytes)} bytes)")
-            return data_uri
-            
+
+            print(f"🎤 Generating per-segment TTS for {len(normalized_events)} segments...")
+            voice = "en-US-GuyNeural"
+            segment_files: List[Path] = []
+            try:
+                for segment in normalized_events:
+                    narration = (segment.get('narration') or segment.get('text') or '').strip()
+                    if not narration:
+                        continue
+
+                    segment_id = segment.get('scene_id') or len(segment_files) + 1
+                    start = float(segment.get('start', 0))
+                    end = float(segment.get('end', start + 2.5))
+                    target_len = max(1.0, end - start)
+
+                    segment_path = output_path.parent / f"{output_path.stem}_seg{segment_id}.mp3"
+
+                    async def _synthesize_segment(text=narration, path=segment_path):
+                        await self._stream_tts_to_file(text, voice, path)
+
+                    self._run_async_task(_synthesize_segment)
+                    if not segment_path.exists() or segment_path.stat().st_size == 0:
+                        print(f"⚠️ Segment {segment_id} TTS failed")
+                        continue
+
+                    actual_duration = self._measure_audio_duration(segment_path)
+                    if actual_duration and abs(actual_duration - target_len) > 0.2:
+                        self._retime_audio_clip(segment_path, target_len, actual_duration)
+
+                    segment_files.append(segment_path)
+
+                if not segment_files:
+                    print("⚠️ No TTS segments generated")
+                    return None
+
+                concatenated = concatenate_audioclips([AudioFileClip(str(path)) for path in segment_files])
+                concatenated.write_audiofile(str(output_path), verbose=False, logger=None)
+                concatenated.close()
+
+                with open(output_path, 'rb') as f:
+                    audio_bytes = f.read()
+                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                data_uri = f"data:audio/mpeg;base64,{audio_base64}"
+                print(f"✅ Concatenated TTS narration generated ({len(audio_bytes)} bytes)")
+                return data_uri
+            finally:
+                for path in segment_files:
+                    try:
+                        if path.exists():
+                            path.unlink()
+                    except Exception:
+                        pass
+                if output_path.exists():
+                    output_path.unlink()
+
         except Exception as e:
             print(f"⚠️ TTS generation failed: {e}")
             return None

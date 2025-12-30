@@ -680,64 +680,30 @@
             }
         };
 
-        const sceneData = {{SCENE_DATA_JSON}};
+        const timelineSegments = {{TIMELINE_SEGMENTS_JSON}};
         const audioElement = document.getElementById('narrationAudio');
         const hasAudio = audioElement && audioElement.src && audioElement.src !== window.location.href;
+        const totalDuration = timelineSegments?.length ? timelineSegments[timelineSegments.length - 1].end : 60;
 
-        let tl = gsap.timeline({ paused: true });
+        let tl = gsap.timeline({ paused: true, defaults: { ease: 'power2.out' } });
 
         function initEngine() {
-            document.getElementById('captions').innerText = 'Ready to start...';
-            
-            if (sceneData.setup) {
-                sceneData.setup.forEach(s => {
-                    if (Library[s.action]) {
-                        Library[s.action](...s.params);
-                    }
-                });
-            }
+            const captionEl = document.getElementById('captions');
+            captionEl.innerText = 'Ready to start...';
 
-            if (sceneData.timeline) {
-                sceneData.timeline.forEach(step => {
-                    tl.to('#captions', { 
-                        onStart: () => { 
-                            document.getElementById('captions').innerText = step.text || ''; 
-                        },
-                        duration: 0.1 
-                    }, step.t);
+            timelineSegments.forEach(segment => {
+                const { start, end, text, scene_id } = segment;
+                const duration = Math.max(0.2, end - start);
+                const sceneSelector = `.scene-${scene_id}`;
 
-                    if (step.action && Library[step.action]) {
-                        if (step.action === 'transferElectron') {
-                            Library.transferElectron(step.from, step.to, tl, step.t);
-                        } else if (step.action === 'updateCharge') {
-                            tl.to({}, { 
-                                onStart: () => Library.updateCharge(step.target, step.val), 
-                                duration: 0.1 
-                            }, step.t);
-                        } else if (step.action === 'animateStickFigure') {
-                            Library.animateStickFigure(step.target, step.pose, tl, step.t);
-                        } else if (step.action === 'moveObject') {
-                            Library.moveObject(step.target, step.toX, step.toY, tl, step.t, step.duration || 1);
-                        } else if (step.action === 'fadeIn') {
-                            Library.fadeIn(step.target, tl, step.t, step.duration || 0.5);
-                        } else if (step.action === 'fadeOut') {
-                            Library.fadeOut(step.target, tl, step.t, step.duration || 0.5);
-                        } else if (step.action === 'animateDraw') {
-                            Library.animateDraw(step.target, tl, step.t, step.duration || 1.5);
-                        } else if (step.action === 'writeText') {
-                            Library.writeText(step.target, tl, step.t, step.duration || 1);
-                        } else if (step.action === 'connect') {
-                            Library.connect(step.from, step.to, tl, step.t, step.duration || 0.5);
-                        } else if (step.action === 'circle') {
-                            Library.circle(step.target, tl, step.t, step.duration || 0.5);
-                        } else if (step.action === 'underline') {
-                            Library.underline(step.target, tl, step.t, step.duration || 0.5);
-                        } else if (step.action === 'erase') {
-                            Library.erase(step.target, tl, step.t, step.duration || 0.5);
-                        }
-                    }
-                });
-            }
+                tl.to('#captions', { 
+                    onStart: () => { captionEl.innerText = text || ''; },
+                    duration: 0.05 
+                }, start);
+
+                tl.to(sceneSelector, { autoAlpha: 1, duration: 0.3 }, start);
+                tl.to(sceneSelector, { autoAlpha: 0, duration: 0.4 }, end);
+            });
         }
 
         function playEngine() {

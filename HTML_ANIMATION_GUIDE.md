@@ -29,6 +29,22 @@ MoviePy combines video + audio
 Final MP4 with voiceover delivered
 ```
 
+### Timeline-Locked Sync Flow
+
+1. **AIProcessor Timeline Contract**  
+   - `personalize_content` now requires Gemini to return `segments` with `scene_id`, `start`, `end`, `text`, `scene`, `max_syllables`, and `word_count`.  
+   - `_normalize_timed_segments` clamps every segment to monotonic timestamps and enriches the visual prompt, producing the canonical `timeline_segments`.
+
+2. **HTML/GSAP Consumption**  
+   - `generate_sketch_html` embeds the first 12 segments directly into the Gemini animation prompt and injects the entire array into `animation_engine_template.html` as `timelineSegments`.  
+   - The template uses those absolute seconds to update captions and fade `.scene-{scene_id}` wrappers via GSAP (`tl.to(..., start)` / `tl.to(..., end)`), so visuals cannot drift from the contract.
+
+3. **Segment-by-Segment TTS (Edge/Eleven fallback)**  
+   - `_generate_timeline_narration` synthesizes one clip per segment, retimes any clip that deviates (>0.2s) from its `end-start`, then concatenates the clips in order.  
+   - The merged MP3 is embedded as a base64 data URI (`{{AUDIO_DATA_URI}}`) so Playwright recordings and manual previews stay in lockstep with the GSAP timeline.
+
+Together, these three layers ensure video, captions, and narration share the same authoritative timestamps—no component is allowed to invent pacing.
+
 ### Technologies Used
 
 - **Gemini 3 Pro Preview** - Advanced HTML/JavaScript code generation
@@ -205,6 +221,23 @@ playwright install chromium
 3. **Provide specific interests** for more personalized visuals
 4. **Monitor Gemini 3 Pro usage** - it has lower rate limits than 2.5 Flash
 5. **Clean temp files periodically** to save disk space
+
+## QA Verification Checklist
+
+1. **Validate Timeline Contract**  
+   - Open the generated HTML file and run `console.table(timelineSegments)`; verify `start` and `end` are strictly increasing, end of final segment equals `total_duration`, and captions match the narration text.
+
+2. **Confirm GSAP Binding**  
+   - In DevTools, run `tl.duration()` to confirm it matches the final segment end.  
+   - Scrub using the built-in controls and ensure `.scene-{scene_id}` fades align with the logged `timelineSegments`.
+
+3. **Audio Alignment**  
+   - Inspect `#narrationAudio.src` (base64) and confirm `_generate_timeline_narration` logged `Concatenated TTS narration generated`.  
+   - Spot-check by muting/unmuting segments; captions should flip exactly when the spoken line changes.
+
+4. **Final MP4 Review**  
+   - After Playwright capture, open the MP4 and verify visual scene switches, captions, and narration transitions match the timeline spreadsheet used in step 1.  
+   - Optional: load the MP4 into any editor displaying SMPTE time to confirm each beat starts within ±0.1 s of the contract.
 
 ## Rate Limits
 
