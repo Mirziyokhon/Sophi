@@ -24,6 +24,19 @@ STABILITY_API_KEY = os.getenv("STABILITY_API_KEY", "")
 PIKA_API_KEY = os.getenv("PIKA_API_KEY", "")
 RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY", "")
 
+# Authentication & Database
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sophi_dev.db")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY", JWT_SECRET_KEY)
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+EMAIL_FROM_ADDRESS = os.getenv("EMAIL_FROM_ADDRESS", "noreply@sophi.ai")
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://sophi-frontend-1115776966.europe-west1.run.app")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", None)
+APP_ENV = os.getenv("APP_ENV", "production")
+
 # AWS Configuration
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")

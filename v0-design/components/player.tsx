@@ -1,7 +1,7 @@
 'use client'
 
-import { Share2, Share, MessageCircle, Copy, Check, ExternalLink, Download } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
+import { Share2, Share, MessageCircle, Copy, Check, ExternalLink, Download, Link as LinkIcon } from 'lucide-react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '@/contexts/AppContext'
 import { api } from '../lib/api'
@@ -15,6 +15,7 @@ export function Player({ onCreateAnother }: PlayerProps) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const [showShareMenu, setShowShareMenu] = useState(false)
+  const [downloadHintVisible, setDownloadHintVisible] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   if (!currentVideo) {
@@ -27,6 +28,23 @@ export function Player({ onCreateAnother }: PlayerProps) {
 
   const videoUrl = api.getVideoURL(currentVideo.filename)
   const isMP4 = currentVideo.media_type === 'video' || currentVideo.filename?.endsWith('.mp4')
+
+  const handleDownloadClick = () => {
+    if (!videoUrl) {
+      return
+    }
+    setDownloadHintVisible(true)
+
+    // Use a dynamic anchor so mobile browsers open the file in a new tab
+    const anchor = document.createElement('a')
+    anchor.href = videoUrl
+    anchor.download = currentVideo.filename || 'sophi_video.mp4'
+    anchor.target = '_blank'
+    anchor.rel = 'noopener'
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(window.location.href)
@@ -64,15 +82,29 @@ export function Player({ onCreateAnother }: PlayerProps) {
             </div>
             
             {/* Download Button */}
-            <div className="mt-4 flex justify-center">
-              <a
-                href={videoUrl}
-                download={currentVideo.filename}
-                className="px-6 py-2 bg-white/20 hover:bg-white/30 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+            <div className="mt-4 flex flex-col items-center gap-3">
+              <button
+                onClick={handleDownloadClick}
+                className="px-6 py-2 bg-white/20 hover:bg-white/30 text-white font-medium rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 Download Video
-              </a>
+              </button>
+
+              {downloadHintVisible && (
+                <div className="text-sm text-white/80 text-center space-y-1">
+                  <p>On mobile, if the download doesn’t start automatically, tap the link below and choose “Download”.</p>
+                  <a
+                    href={videoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 underline decoration-dotted"
+                  >
+                    <LinkIcon className="w-4 h-4" />
+                    Open direct video link
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

@@ -121,6 +121,27 @@ export interface SettingsResponse {
   }
 }
 
+export interface AuthUser {
+  id: string
+  email: string
+  full_name?: string | null
+  is_email_verified: boolean
+  created_at: string
+}
+
+export interface AuthResponse {
+  success: boolean
+  user: AuthUser
+}
+
+export interface MessageResponse {
+  message: string
+}
+
+interface RequestOptions extends RequestInit {
+  skipJson?: boolean
+}
+
 class SophiAPI {
   private baseURL: string
 
@@ -128,11 +149,41 @@ class SophiAPI {
     this.baseURL = baseURL
   }
 
+  private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const { skipJson, headers, ...rest } = options
+    const response = await fetch(`${this.baseURL}${path}`, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      ...rest,
+    })
+
+    if (!response.ok) {
+      let detail = 'Request failed'
+      try {
+        const errorBody = await response.json()
+        detail = errorBody.detail || detail
+      } catch {
+        // ignore json parse error
+      }
+      throw new Error(detail)
+    }
+
+    if (skipJson || response.status === 204) {
+      return {} as T
+    }
+    return response.json()
+  }
+
   /**
    * Health check
    */
   async healthCheck(): Promise<HealthResponse> {
-    const response = await fetch(`${this.baseURL}/api/health`)
+    const response = await fetch(`${this.baseURL}/api/health`, {
+      credentials: 'include',
+    })
     if (!response.ok) throw new Error('Health check failed')
     return response.json()
   }
@@ -147,6 +198,7 @@ class SophiAPI {
     const response = await fetch(`${this.baseURL}/api/pdf/info`, {
       method: 'POST',
       body: formData,
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -168,6 +220,7 @@ class SophiAPI {
     const response = await fetch(`${this.baseURL}/api/extract/pdf`, {
       method: 'POST',
       body: formData,
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -188,6 +241,7 @@ class SophiAPI {
     const response = await fetch(`${this.baseURL}/api/extract/image`, {
       method: 'POST',
       body: formData,
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -208,6 +262,7 @@ class SophiAPI {
     const response = await fetch(`${this.baseURL}/api/extract/url`, {
       method: 'POST',
       body: formData,
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -228,6 +283,7 @@ class SophiAPI {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ text, content_type: 'text' }),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -248,6 +304,7 @@ class SophiAPI {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -268,6 +325,7 @@ class SophiAPI {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ text }),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -288,6 +346,7 @@ class SophiAPI {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -302,7 +361,9 @@ class SophiAPI {
    * Get video library
    */
   async getLibrary(): Promise<LibraryResponse> {
-    const response = await fetch(`${this.baseURL}/api/library`)
+    const response = await fetch(`${this.baseURL}/api/library`, {
+      credentials: 'include',
+    })
     if (!response.ok) throw new Error('Failed to fetch library')
     return response.json()
   }
@@ -311,7 +372,9 @@ class SophiAPI {
    * Get specific video
    */
   async getVideo(videoId: string): Promise<{ success: boolean; video: VideoData }> {
-    const response = await fetch(`${this.baseURL}/api/video/${videoId}`)
+    const response = await fetch(`${this.baseURL}/api/video/${videoId}`, {
+      credentials: 'include',
+    })
     if (!response.ok) throw new Error('Video not found')
     return response.json()
   }
@@ -322,6 +385,7 @@ class SophiAPI {
   async clearLibrary(): Promise<{ success: boolean; message: string }> {
     const response = await fetch(`${this.baseURL}/api/library/clear`, {
       method: 'DELETE',
+      credentials: 'include',
     })
     if (!response.ok) throw new Error('Failed to clear library')
     return response.json()
@@ -331,7 +395,9 @@ class SophiAPI {
    * Get settings
    */
   async getSettings(): Promise<SettingsResponse> {
-    const response = await fetch(`${this.baseURL}/api/settings`)
+    const response = await fetch(`${this.baseURL}/api/settings`, {
+      credentials: 'include',
+    })
     if (!response.ok) throw new Error('Failed to fetch settings')
     return response.json()
   }
@@ -341,6 +407,73 @@ class SophiAPI {
    */
   getVideoURL(filename: string): string {
     return `${this.baseURL}/videos/${filename}`
+  }
+
+  async signup(data: { full_name?: string; email: string; password: string }): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({
+        full_name: data.full_name,
+        email: data.email,
+        password: data.password,
+      }),
+    })
+  }
+
+  async login(data: { email: string; password: string }): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async googleLogin(idToken: string): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken }),
+    })
+  }
+
+  async logout(): Promise<MessageResponse> {
+    return this.request<MessageResponse>('/auth/logout', {
+      method: 'POST',
+    })
+  }
+
+  async refreshSession(): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/auth/refresh', { method: 'POST' })
+  }
+
+  async currentUser(): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/auth/me')
+  }
+
+  async requestPasswordReset(email: string): Promise<MessageResponse> {
+    return this.request<MessageResponse>('/auth/request-password-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<MessageResponse> {
+    return this.request<MessageResponse>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    })
+  }
+
+  async verifyEmail(token: string): Promise<MessageResponse> {
+    return this.request<MessageResponse>('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+  }
+
+  async resendVerification(email: string): Promise<MessageResponse> {
+    return this.request<MessageResponse>('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
   }
 }
 

@@ -16,38 +16,23 @@ import { Library } from '@/components/library'
 import { Login } from '@/components/login'
 import { Signup } from '@/components/signup'
 import { BackgroundGrid } from '@/components/background-grid'
-import { ProtectedRoute } from '@/components/auth/protected-route'
+import { useAuth } from '@/contexts/AuthContext'
+import { toast } from 'sonner'
 
 type Screen = 'landing' | 'dashboard' | 'upload' | 'personalization' | 'processing' | 'player' | 'library' | 'login' | 'signup' | 'contact' | 'profile'
 
 export default function Home() {
-  const [screen, setScreen] = useState<Screen>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sophi_v0_screen')
-      return (saved as Screen) || 'landing'
-    }
-    return 'landing'
-  })
-  const [videoGenerated, setVideoGenerated] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sophi_v0_video_generated')
-      return saved === 'true'
-    }
-    return false
-  })
-
-  // Save state to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sophi_v0_screen', screen)
-    }
-  }, [screen])
+  const { user, isLoading, signOut } = useAuth()
+  const [screen, setScreen] = useState<Screen>('landing')
+  const [videoGenerated, setVideoGenerated] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sophi_v0_video_generated', videoGenerated.toString())
+    if (user) {
+      setScreen((prev) => (prev === 'landing' || prev === 'login' || prev === 'signup' ? 'dashboard' : prev))
+    } else if (!isLoading) {
+      setScreen((prev) => (prev !== 'login' && prev !== 'signup' ? 'landing' : prev))
     }
-  }, [videoGenerated])
+  }, [user, isLoading])
 
   const handleStartLearning = () => setScreen('upload')
   const handleUploadNext = () => setScreen('personalization')
@@ -94,9 +79,11 @@ export default function Home() {
     }, 100)
   }
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await signOut()
     setScreen('landing')
     setVideoGenerated(false)
+    toast.success('Signed out successfully')
   }
 
   const handleNavigateToDashboard = () => setScreen('dashboard')
@@ -107,7 +94,7 @@ export default function Home() {
         <BackgroundGrid />
       </div>
       <div className="relative z-20">
-        {screen === 'login' || screen === 'signup' || screen === 'landing' ? (
+        {(!user || screen === 'login' || screen === 'signup' || screen === 'landing') ? (
           // Public views with header
           <div className="flex flex-col flex-grow min-h-screen">
             {screen !== 'login' && screen !== 'signup' && (
@@ -125,8 +112,8 @@ export default function Home() {
             <main className={`flex-grow ${screen !== 'login' && screen !== 'signup' ? 'pt-32' : ''}`}>
               {screen === 'landing' && <Landing onStart={handleStartLearning} />}
               {screen === 'login' && (
-                <Login 
-                  onSuccess={handleStartLearning}
+                <Login
+                  onSuccess={() => setScreen('dashboard')}
                   onSwitchToSignup={handleNavigateToSignup}
                   onHome={handleLogoClick}
                   onNavigateToLibrary={handleNavigateToLibrary}
@@ -135,8 +122,8 @@ export default function Home() {
                 />
               )}
               {screen === 'signup' && (
-                <Signup 
-                  onSuccess={handleStartLearning}
+                <Signup
+                  onSuccess={() => setScreen('dashboard')}
                   onSwitchToLogin={handleNavigateToLogin}
                   onHome={handleLogoClick}
                   onNavigateToLibrary={handleNavigateToLibrary}

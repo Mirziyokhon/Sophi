@@ -1,91 +1,143 @@
 'use client'
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+  useCallback,
+} from 'react'
+import { api, type AuthUser } from '@/lib/api'
 
-interface User {
-  id: string
-  email: string
-  name: string
-}
+type AuthResult = { success: boolean; error?: string; message?: string }
 
 interface AuthContextType {
-  user: User | null
+  user: AuthUser | null
   isLoading: boolean
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
-  signUp: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>
-  signOut: () => void
+  signIn: (email: string, password: string) => Promise<AuthResult>
+  signUp: (name: string, email: string, password: string) => Promise<AuthResult>
+  googleSignIn: (idToken: string) => Promise<AuthResult>
+  signOut: () => Promise<void>
+  refreshUser: () => Promise<void>
+  requestPasswordReset: (email: string) => Promise<AuthResult>
+  resetPassword: (token: string, password: string) => Promise<AuthResult>
+  verifyEmail: (token: string) => Promise<AuthResult>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+async function unwrap<T>(fn: () => Promise<T>): Promise<[T | null, string | null]> {
+  try {
+    const value = await fn()
+    return [value, null]
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Something went wrong. Please try again.'
+    return [null, message]
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Check for existing session on mount
-    const savedUser = localStorage.getItem('sophi_user')
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser))
-      } catch (error) {
-        localStorage.removeItem('sophi_user')
-      }
+  const fetchCurrentUser = useCallback(async () => {
+    const [meErrorless] = await unwrap(() => api.currentUser())
+    if (meErrorless) {
+      setUser(meErrorless.user)
+      return
     }
-    setIsLoading(false)
+
+    const [refreshed] = await unwrap(() => api.refreshSession())
+    if (refreshed) {
+      setUser(refreshed.user)
+      return
+    }
+
+    setUser(null)
   }, [])
 
-  const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      // Simulate API call - in production, this would be a real API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Mock authentication - accept any email/password for demo
-      if (email && password) {
-        const user: User = {
-          id: Math.random().toString(36).substr(2, 9),
-          email,
-          name: email.split('@')[0] // Use email prefix as name for demo
-        }
-        
-        setUser(user)
-        localStorage.setItem('sophi_user', JSON.stringify(user))
-        return { success: true }
-      } else {
-        return { success: false, error: 'Please enter email and password' }
-      }
-    } catch (error) {
-      return { success: false, error: 'An error occurred during sign in' }
-    }
-  }
+  useEffect(() => {
+    fetchCurrentUser().finally(() => setIsLoading(false))
+  }, [fetchCurrentUser])
 
-  const signUp = async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      if (name && email && password) {
-        const user: User = {
-          id: Math.random().toString(36).substr(2, 9),
-          email,
-          name
-        }
-        
-        setUser(user)
-        localStorage.setItem('sophi_user', JSON.stringify(user))
-        return { success: true }
-      } else {
-        return { success: false, error: 'Please fill in all fields' }
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      const [result, error] = await unwrap(() => api.login({ email, password }))
+      if (error || !result) {
+        return { success: false, error: error ?? undefined }
       }
-    } catch (error) {
-      return { success: false, error: 'An error occurred during sign up' }
-    }
-  }
+      setUser(result.user)
+      return { success: true }
+    },
+    []
+  )
 
-  const signOut = () => {
+  const signUp = useCallback(
+    async (name: string, email: string, password: string): Promise<AuthResult> => {
+      const [result, error] = await unwrap(() =>
+        api.signup({ full_name: name || undefined, email, password })
+      )
+      if (error || !result) {
+        return { success: false, error: error ?? undefined }
+      }
+      setUser(result.user)
+      return {
+        success: true,
+        message: result.user.is_email_verified
+          ? undefined
+          : 'Account created! Please verify your email before continuing.',
+      }
+    },
+    []
+  )
+
+  const googleSignIn = useCallback(async (idToken: string): Promise<AuthResult> => {
+    const [result, error] = await unwrap(() => api.googleLogin(idToken))
+    if (error || !result) {
+      return { success: false, error: error ?? undefined }
+    }
+    setUser(result.user)
+    return { success: true }
+  }, [])
+
+  const signOut = useCallback(async () => {
+    await unwrap(() => api.logout())
     setUser(null)
-    localStorage.removeItem('sophi_user')
-  }
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    await fetchCurrentUser()
+  }, [fetchCurrentUser])
+
+  const requestPasswordReset = useCallback(async (email: string): Promise<AuthResult> => {
+    const [, error] = await unwrap(() => api.requestPasswordReset(email))
+    if (error) {
+      return { success: false, error: error ?? undefined }
+    }
+    return { success: true }
+  }, [])
+
+  const resetPassword = useCallback(
+    async (token: string, password: string): Promise<AuthResult> => {
+      const [, error] = await unwrap(() => api.resetPassword(token, password))
+      if (error) {
+        return { success: false, error: error ?? undefined }
+      }
+      return { success: true }
+    },
+    []
+  )
+
+  const verifyEmail = useCallback(async (token: string): Promise<AuthResult> => {
+    const [, error] = await unwrap(() => api.verifyEmail(token))
+    if (error) {
+      return { success: false, error: error ?? undefined }
+    }
+    await fetchCurrentUser()
+    return { success: true, message: 'Email verified successfully' }
+  }, [fetchCurrentUser])
 
   return (
     <AuthContext.Provider
@@ -94,7 +146,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         signIn,
         signUp,
+        googleSignIn,
         signOut,
+        refreshUser,
+        requestPasswordReset,
+        resetPassword,
+        verifyEmail,
       }}
     >
       {children}

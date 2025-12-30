@@ -231,10 +231,88 @@ Learning Style: Direct, straightforward explanations using common experiences an
             chunk = sentences[i * chunk_size:(i + 1) * chunk_size]
             if not chunk:
                 chunk = sentences[-chunk_size:]
-            prompts.append(
+            base_prompt = (
                 f"Scene {i + 1}: Illustrate {', '.join(chunk)} with energetic whiteboard animation."
             )
+            prompts.append(self._enrich_visual_prompt(' '.join(chunk), base_prompt))
         return prompts[:num_scenes]
+
+    def _enrich_visual_prompt(self, narration: str, prompt: str) -> str:
+        """Add concrete subjects, props, and camera notes so visuals feel intentional."""
+        narration = (narration or "").strip()
+        prompt = (prompt or "").strip()
+        if not narration and not prompt:
+            narration = "Explain the concept using an annotated notebook sketch"
+
+        merged = f"{narration} {prompt}".strip()
+        keywords = self._extract_visual_keywords(merged)
+        context_hint = self._infer_scene_context(keywords)
+        camera_hint = self._suggest_camera_motion(keywords)
+
+        detail_clause = ""
+        if keywords:
+            primary = ', '.join(keywords[:5])
+            detail_clause = f" Highlight {primary} with labeled callouts and directional arrows."
+
+        texture_clause = (
+            " Render as a realistic sketchbook panel with cross-hatching, ink smudges, and sticky-note annotations."
+        )
+
+        enriched = f"{prompt or narration}. {context_hint} {camera_hint}{detail_clause} {texture_clause}"
+        return ' '.join(enriched.split())
+
+    def _extract_visual_keywords(self, text: str, max_terms: int = 6) -> List[str]:
+        tokens = re.findall(r"[A-Za-z][A-Za-z'-]*", text or "")
+        stopwords = {
+            "the", "and", "or", "but", "so", "because", "to", "of", "a", "an", "is",
+            "are", "was", "were", "this", "that", "these", "those", "with", "for",
+            "into", "on", "in", "by", "from", "about", "it", "its", "their", "his",
+            "her", "your", "you", "we", "they", "as", "at", "be", "can", "will",
+            "should", "could", "just"
+        }
+        keywords: List[str] = []
+        for token in tokens:
+            lower = token.lower()
+            if lower in stopwords or len(token) <= 2:
+                continue
+            if token not in keywords:
+                keywords.append(token)
+            if len(keywords) >= max_terms:
+                break
+        return keywords
+
+    def _infer_scene_context(self, keywords: List[str]) -> str:
+        if not keywords:
+            return "Set the scene on an open notebook with depth cues and background props."
+
+        keyword_set = {kw.lower() for kw in keywords}
+        if keyword_set & {"lab", "molecule", "reaction", "experiment", "chemical", "cell"}:
+            return "Stage the scene inside a cozy laboratory bench with glassware, instruments, and margin formulas."
+        if keyword_set & {"city", "economy", "business", "market", "trade"}:
+            return "Place the sketch over a city skyline with charts, sticky tabs, and floating currency icons."
+        if keyword_set & {"earth", "planet", "ecosystem", "forest", "climate"}:
+            return "Use a nature field spread with layered terrain sketches, contour lines, and atmosphere arrows."
+        if keyword_set & {"student", "classroom", "teacher", "lesson"}:
+            return "Draw a classroom chalkboard perspective with desks, reference cards, and highlighted key terms."
+        return "Frame the concept with tangible props, depth layers, and contextual background scenery."
+
+    def _suggest_camera_motion(self, keywords: List[str]) -> str:
+        motions = [
+            "Use a sweeping top-down camera that pans across the steps in sequence.",
+            "Add a slow zoom-in to the core element before revealing surrounding context.",
+            "Animate quick rack-focus moves between cause and effect elements.",
+            "Employ a diagonal tracking shot so the viewer feels motion through the process."
+        ]
+        if not keywords:
+            return random.choice(motions)
+
+        if any(kw.lower() in {"cycle", "process", "flow", "chain", "timeline"} for kw in keywords):
+            return "Animate a clockwise camera orbit that follows the process arrows."
+
+        if any(kw.lower() in {"comparison", "vs", "balance", "tradeoff"} for kw in keywords):
+            return "Split the canvas with a lateral slider that reveals side-by-side comparisons."
+
+        return random.choice(motions)
 
     
     def enhance_interest_profile(self, interest_description: str) -> str:
@@ -503,7 +581,7 @@ etc."""
             for line in content.split('\n'):
                 if line.strip().startswith('SCENE'):
                     scene_desc = line.split(':', 1)[1].strip() if ':' in line else line
-                    scenes.append(scene_desc)
+                    scenes.append(self._enrich_visual_prompt(scene_desc, scene_desc))
             
             return scenes[:num_scenes]
         except RateLimitError:
@@ -1760,6 +1838,13 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
             visual_prompts.extend(fallback_prompts[:needed])
 
         visual_prompts = visual_prompts[:num_scenes] if visual_prompts else self._fallback_visual_prompts(script_text, num_scenes)
+        visual_prompts = [
+            self._enrich_visual_prompt(
+                scene_details[idx]['narration'] if idx < len(scene_details) else '',
+                prompt
+            )
+            for idx, prompt in enumerate(visual_prompts)
+        ]
         script_text = self._dedupe_sentences(script_text)
 
         return {

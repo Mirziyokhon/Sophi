@@ -2,7 +2,7 @@
 FastAPI Backend Server for Sophi
 Handles API requests from Next.js frontend on port 3000
 """
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -17,6 +17,7 @@ import sys
 import shutil
 
 import config
+from auth import models
 from utils.text_extractor import TextExtractor
 from utils.ai_processor import AIProcessor
 from utils.video_generator import VideoGenerator
@@ -24,6 +25,8 @@ from utils.html_to_video import HTMLToVideoConverter
 from utils.sketch_animator import SketchAnimator
 from utils.queue_handler import request_queue, user_rate_limiter
 from utils.duration_recommender import DurationRecommender
+from auth.router import router as auth_router
+from auth.dependencies import require_current_user, require_verified_user
 
 app = FastAPI(title="Sophi API", version="1.0.0")
 
@@ -50,6 +53,9 @@ app.add_middleware(
 # Mount static files for video serving
 if os.path.exists(config.VIDEO_OUTPUT_DIR):
     app.mount("/videos", StaticFiles(directory=config.VIDEO_OUTPUT_DIR), name="videos")
+
+# Authentication routes
+app.include_router(auth_router)
 
 class PDFInfoRequest(BaseModel):
     pass
@@ -284,240 +290,257 @@ async def recommend_duration(request: dict):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/generate-video")
-async def generate_video(request: VideoGenerationRequest, http_request: Request):
+async def _generate_video_logic(
+    request: VideoGenerationRequest,
+    http_request: Request,
+    current_user: models.User,
+):
     """Generate personalized learning video with rate limiting and queue management"""
     try:
-        # Get user identifier (IP address as fallback)
-        user_id = http_request.client.host if http_request.client else "unknown"
-        
+        user_id = str(current_user.id)
+
         # Check user rate limit
         can_proceed, error_msg = user_rate_limiter.can_make_request(user_id)
         if not can_proceed:
             raise HTTPException(status_code=429, detail=error_msg)
-        
+
         # Record the request
         user_rate_limiter.record_request(user_id)
-        
+
         # Get queue status for logging
         queue_status = request_queue.get_queue_status()
         print(f"📊 Queue status: {queue_status['message']}")
-        
+
         # Initialize processors
-        print(f"🔧 Initializing AI processor...")
+        print("🔧 Initializing AI processor...")
         ai_processor = AIProcessor()
         is_sketch = request.animation_style.lower() == "sketch"
-        
+
         # Enhance interest profile
-        print(f"🧠 Enhancing interest profile...")
+        print("🧠 Enhancing interest profile...")
         enhanced_profile = ai_processor.enhance_interest_profile(request.interest_description)
         print(f"✅ Enhanced profile: {enhanced_profile[:100]}...")
-        
+
         # Process content
         print(f"📝 Processing content (length: {len(request.extracted_text)} chars)...")
         processed_content = ai_processor.process_content(
             request.extracted_text,
             enhanced_profile,
-            request.duration_seconds
+            request.duration_seconds,
         )
-        print(f"✅ Content processed successfully")
-        
+        print("✅ Content processed successfully")
+
         # Generate video
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_filename = f"sophi_video_{timestamp}.mp4"
-        
+
         if is_sketch:
             sketch_animator = SketchAnimator()
             scene_plan = []
-            
-            # Create scene plan from processed content
-            for i, point in enumerate(processed_content['key_points'][:5]):
-                scene_plan.append({
-                    'scene_number': i,
-                    'narration': point,
-                    'visual_description': f"Illustration of: {point}",
-                    'duration': request.duration_seconds / len(processed_content['key_points'][:5])
-                })
-            
+
+            for i, point in enumerate(processed_content["key_points"][:5]):
+                scene_plan.append(
+                    {
+                        "scene_number": i,
+                        "narration": point,
+                        "visual_description": f"Illustration of: {point}",
+                        "duration": request.duration_seconds
+                        / len(processed_content["key_points"][:5]),
+                    }
+                )
+
             video_result = sketch_animator.generate_video_from_scenes(
-                scene_plan,
-                output_filename=output_filename
+                scene_plan, output_filename=output_filename
             )
         elif request.animation_style.lower() == "html":
             print(f"\n{'='*60}")
-            print(f"📹 VIDEO GENERATION PIPELINE STARTED")
+            print("📹 VIDEO GENERATION PIPELINE STARTED")
             print(f"{'='*60}")
-            
-            # CHECKPOINT 1: Generate HTML with Gemini 3 Pro
-            print(f"\n🔵 CHECKPOINT 1/4: Generating HTML Animation with Gemini 3 Pro...")
+
+            print("\n🔵 CHECKPOINT 1/4: Generating HTML Animation with Gemini 3 Pro...")
             html_content = ai_processor.generate_sketch_html(
                 request.extracted_text,
                 processed_content,
                 request.duration_seconds,
-                request.interest_description
+                request.interest_description,
             )
             print(f"✅ CHECKPOINT 1/4: HTML animation generated ({len(html_content)} bytes)")
-            
-            # CHECKPOINT 2: Save HTML to file
-            print(f"\n🔵 CHECKPOINT 2/4: Saving HTML animation to file...")
-            html_filename = output_filename.replace('.mp4', '.html')
+
+            print("\n🔵 CHECKPOINT 2/4: Saving HTML animation to file...")
+            html_filename = output_filename.replace(".mp4", ".html")
             html_path = Path(config.VIDEO_OUTPUT_DIR) / html_filename
             html_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(html_path, 'w', encoding='utf-8') as f:
+
+            with open(html_path, "w", encoding="utf-8") as f:
                 f.write(html_content)
             print(f"✅ CHECKPOINT 2/4: HTML saved to {html_path}")
-            
-            # CHECKPOINT 3: Record with Playwright
-            print(f"\n🔵 CHECKPOINT 3/4: Recording HTML with Playwright...")
+
+            print("\n🔵 CHECKPOINT 3/4: Recording HTML with Playwright...")
             mp4_path = Path(config.VIDEO_OUTPUT_DIR) / output_filename
-            
+
             import subprocess
+
             recorder_script = Path(__file__).parent / "utils" / "html_recorder.py"
-            
+
             print(f"   📍 Recorder script: {recorder_script}")
             print(f"   📍 HTML path: {html_path.absolute()}")
             print(f"   📍 MP4 path: {mp4_path.absolute()}")
             print(f"   📍 Duration: {request.duration_seconds}s")
             print(f"   ⏳ Recording in progress (this takes ~{request.duration_seconds + 10}s)...")
-            
+
             try:
                 result = subprocess.run(
-                    [sys.executable, str(recorder_script), 
-                     str(html_path.absolute()), str(mp4_path.absolute()),
-                     '--duration', str(request.duration_seconds)],
+                    [
+                        sys.executable,
+                        str(recorder_script),
+                        str(html_path.absolute()),
+                        str(mp4_path.absolute()),
+                        "--duration",
+                        str(request.duration_seconds),
+                    ],
                     capture_output=True,
                     text=True,
-                    timeout=request.duration_seconds + 120  # Extra time for processing
+                    timeout=request.duration_seconds + 120,
                 )
-                
-                # Print subprocess output for debugging
+
                 if result.stdout:
-                    print(f"   📝 Recorder output:")
-                    for line in result.stdout.strip().split('\n'):
+                    print("   📝 Recorder output:")
+                    for line in result.stdout.strip().split("\n"):
                         print(f"      {line}")
                 if result.stderr:
-                    print(f"   ⚠️ Recorder errors:")
-                    for line in result.stderr.strip().split('\n'):
+                    print("   ⚠️ Recorder errors:")
+                    for line in result.stderr.strip().split("\n"):
                         print(f"      {line}")
-                
+
                 if result.returncode == 0 and mp4_path.exists():
-                    mp4_size = mp4_path.stat().st_size / (1024 * 1024)  # MB
+                    mp4_size = mp4_path.stat().st_size / (1024 * 1024)
                     print(f"✅ CHECKPOINT 3/4: Playwright recording complete ({mp4_size:.2f} MB)")
-                    
-                    # CHECKPOINT 4: Success
-                    print(f"\n🔵 CHECKPOINT 4/4: Finalizing MP4 video...")
-                    print(f"✅ CHECKPOINT 4/4: MP4 video ready!")
+
+                    print("\n🔵 CHECKPOINT 4/4: Finalizing MP4 video...")
+                    print("✅ CHECKPOINT 4/4: MP4 video ready!")
                     print(f"\n{'='*60}")
-                    print(f"🎉 VIDEO GENERATION PIPELINE COMPLETED SUCCESSFULLY")
+                    print("🎉 VIDEO GENERATION PIPELINE COMPLETED SUCCESSFULLY")
                     print(f"   Output: {mp4_path}")
                     print(f"{'='*60}\n")
-                    
+
                     video_result = {
-                        'video_path': str(mp4_path),
-                        'duration': request.duration_seconds,
-                        'media_type': 'video'
+                        "video_path": str(mp4_path),
+                        "duration": request.duration_seconds,
+                        "media_type": "video",
                     }
                 else:
-                    print(f"❌ CHECKPOINT 3/4: Playwright recording FAILED (exit code: {result.returncode})")
+                    print(
+                        f"❌ CHECKPOINT 3/4: Playwright recording FAILED (exit code: {result.returncode})"
+                    )
                     print(f"\n{'='*60}")
-                    print(f"⚠️ FALLING BACK TO HTML ANIMATION")
+                    print("⚠️ FALLING BACK TO HTML ANIMATION")
                     print(f"{'='*60}\n")
                     video_result = {
-                        'video_path': str(html_path),
-                        'html_path': str(html_path),
-                        'html_url': f"/videos/{html_filename}",
-                        'html_content': html_content,
-                        'duration': request.duration_seconds,
-                        'media_type': 'html_animation'
+                        "video_path": str(html_path),
+                        "html_path": str(html_path),
+                        "html_url": f"/videos/{html_filename}",
+                        "html_content": html_content,
+                        "duration": request.duration_seconds,
+                        "media_type": "html_animation",
                     }
             except subprocess.TimeoutExpired:
-                print(f"❌ CHECKPOINT 3/4: Playwright recording TIMED OUT")
+                print("❌ CHECKPOINT 3/4: Playwright recording TIMED OUT")
                 print(f"\n{'='*60}")
-                print(f"⚠️ FALLING BACK TO HTML ANIMATION")
+                print("⚠️ FALLING BACK TO HTML ANIMATION")
                 print(f"{'='*60}\n")
                 video_result = {
-                    'video_path': str(html_path),
-                    'html_path': str(html_path),
-                    'html_url': f"/videos/{html_filename}",
-                    'html_content': html_content,
-                    'duration': request.duration_seconds,
-                    'media_type': 'html_animation'
+                    "video_path": str(html_path),
+                    "html_path": str(html_path),
+                    "html_url": f"/videos/{html_filename}",
+                    "html_content": html_content,
+                    "duration": request.duration_seconds,
+                    "media_type": "html_animation",
                 }
             except Exception as e:
                 print(f"❌ CHECKPOINT 3/4: Playwright recording ERROR: {e}")
                 print(f"\n{'='*60}")
-                print(f"⚠️ FALLING BACK TO HTML ANIMATION")
+                print("⚠️ FALLING BACK TO HTML ANIMATION")
                 print(f"{'='*60}\n")
                 video_result = {
-                    'video_path': str(html_path),
-                    'html_path': str(html_path),
-                    'html_url': f"/videos/{html_filename}",
-                    'html_content': html_content,
-                    'duration': request.duration_seconds,
-                    'media_type': 'html_animation'
+                    "video_path": str(html_path),
+                    "html_path": str(html_path),
+                    "html_url": f"/videos/{html_filename}",
+                    "html_content": html_content,
+                    "duration": request.duration_seconds,
+                    "media_type": "html_animation",
                 }
         else:
-            # Manim requires heavy system dependencies (LaTeX/FFmpeg) that
-            # aren't available in the lightweight Cloud Run container, so we
-            # disable it in production and rely on the HTML/placeholder
-            # pipeline instead.
             video_generator = VideoGenerator(use_manim=False)
             video_result = video_generator.generate_complete_video(
-                processed_content['script'],
-                processed_content['visual_prompts'],
+                processed_content["script"],
+                processed_content["visual_prompts"],
                 request.duration_seconds,
                 output_filename,
-                processed_content.get('scene_details')
+                processed_content.get("scene_details"),
             )
-        
-        # Prepare video data
+
         video_id = timestamp
-        
-        # Determine if this is an HTML animation or video
-        is_html_animation = video_result.get('media_type') == 'html_animation'
-        
+        is_html_animation = video_result.get("media_type") == "html_animation"
+
         video_data = {
-            'video_id': video_id,
-            'filename': output_filename.replace('.mp4', '.html') if is_html_animation else output_filename,
-            'video_url': video_result.get('html_url') if is_html_animation else f"/videos/{output_filename}",
-            'timestamp': datetime.now().isoformat(),
-            'duration': request.duration_seconds,
-            'interest': request.interest_description,
-            'word_count': len(request.extracted_text.split()),
-            'script': processed_content['script'],
-            'summary': processed_content['summary'],
-            'key_points': processed_content['key_points'],
-            'takeaway': processed_content['takeaway'],
-            'media_type': 'html_animation' if is_html_animation else 'video',
-            'subtitle_path': video_result.get('subtitle_path'),
-            'subtitle_url': f"/videos/{Path(video_result.get('subtitle_path', '')).name}" if video_result.get('subtitle_path') else None
+            "video_id": video_id,
+            "filename": output_filename.replace(".mp4", ".html")
+            if is_html_animation
+            else output_filename,
+            "video_url": video_result.get("html_url")
+            if is_html_animation
+            else f"/videos/{output_filename}",
+            "timestamp": datetime.now().isoformat(),
+            "duration": request.duration_seconds,
+            "interest": request.interest_description,
+            "word_count": len(request.extracted_text.split()),
+            "script": processed_content["script"],
+            "summary": processed_content["summary"],
+            "key_points": processed_content["key_points"],
+            "takeaway": processed_content["takeaway"],
+            "media_type": "html_animation" if is_html_animation else "video",
+            "subtitle_path": video_result.get("subtitle_path"),
+            "subtitle_url": f"/videos/{Path(video_result.get('subtitle_path', '')).name}"
+            if video_result.get("subtitle_path")
+            else None,
         }
-        
-        # Add HTML-specific fields if this is an HTML animation
+
         if is_html_animation:
-            video_data['html_content'] = video_result.get('html_content')
-            video_data['html_url'] = video_result.get('html_url')
-        
-        # Save metadata
+            video_data["html_content"] = video_result.get("html_content")
+            video_data["html_url"] = video_result.get("html_url")
+
         save_video_metadata(video_data)
-        
+
         return {
-            'success': True,
-            'video_data': video_data,
-            'processed_content': processed_content
+            "success": True,
+            "video_data": video_data,
+            "processed_content": processed_content,
         }
-        
+
     except Exception as e:
         print(f"❌ Error in generate_video: {type(e).__name__}: {str(e)}")
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/api/generate-video")
+async def generate_video(
+    request: VideoGenerationRequest,
+    http_request: Request,
+    current_user: models.User = Depends(require_verified_user),
+):
+    return await _generate_video_logic(request, http_request, current_user)
+
+
 @app.post("/api/generate-mp4-video")
-async def generate_mp4_video(request: VideoGenerationRequest, http_request: Request):
-    """Generate MP4 video with subtitles (alias for generate-video)"""
-    return await generate_video(request, http_request)
+async def generate_mp4_video(
+    request: VideoGenerationRequest,
+    http_request: Request,
+    current_user: models.User = Depends(require_verified_user),
+):
+    return await _generate_video_logic(request, http_request, current_user)
 
 @app.get("/api/library")
 async def get_library():
