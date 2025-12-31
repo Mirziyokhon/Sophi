@@ -19,19 +19,32 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const GUEST_USER: User = {
+  id: 'guest',
+  email: 'guest@sophi.ai',
+  name: 'Guest',
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | null>(GUEST_USER)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Check for existing session on mount
+    if (typeof window === 'undefined') {
+      setIsLoading(false)
+      return
+    }
+
     const savedUser = localStorage.getItem('sophi_user')
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser))
       } catch (error) {
         localStorage.removeItem('sophi_user')
+        setUser(GUEST_USER)
       }
+    } else {
+      setUser(GUEST_USER)
     }
     setIsLoading(false)
   }, [])
@@ -84,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = () => {
-    setUser(null)
+    setUser(GUEST_USER)
     localStorage.removeItem('sophi_user')
   }
 
@@ -93,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: true,
         signIn,
         signUp,
         signOut,

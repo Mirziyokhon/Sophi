@@ -220,32 +220,86 @@ async def record_html_to_video(html_path: str, output_path: str, duration: int =
             print(f"   [OK] Recording context created")
             
             page = await context.new_page()
+
+            # Stream browser console logs for debugging (helps catch GSAP / script errors)
+            page.on("console", lambda msg: print(f"[BROWSER][{msg.type.upper()}] {msg.text}"))
+            page.on("pageerror", lambda exc: print(f"[BROWSER][ERROR] {exc}"))
             
             # Load HTML file
             print(f"\n[STEP 5/6] Recording animation for {duration}s...")
             html_file_url = f"file:///{html_path.replace(chr(92), '/')}"
-            await page.goto(html_file_url)
+            await page.goto(html_file_url, wait_until="domcontentloaded")
             await page.wait_for_load_state('networkidle')
             print(f"   [OK] HTML loaded")
+
+            # Ensure GSAP / animation scripts are ready before recording
+            print(f"   [WAIT] Ensuring animation scripts are ready...")
+            try:
+                await page.wait_for_function("""
+                    () => {
+                        const hasTimeline = typeof window.buildTimeline === 'function' || !!window.masterTimeline
+                        const hasEngine = typeof window.playEngine === 'function' || typeof window.playAnimation === 'function'
+                        return hasTimeline || hasEngine
+                    }
+                """, timeout=20000)
+            except Exception:
+                print("   [WARN] Animation init functions not detected after 20s")
             
-            # Wait for animation to auto-start (template has auto-play on load)
-            await page.wait_for_timeout(500)
-            
-            # Manually trigger play as backup
+            # Manually trigger play as backup (and run buildTimeline if defined)
             await page.evaluate("""
                 () => {
-                    if (typeof playEngine === 'function') {
-                        playEngine();
-                    }
-                    if (typeof window.playAnimation === 'function') {
-                        window.playAnimation();
-                    }
-                    if (window.masterTimeline) {
-                        window.masterTimeline.play();
-                    }
+                    const start = () => {
+                        try {
+                            if (typeof window.buildTimeline === 'function') {
+                                if (!window.__sophiTimelineBuilt) {
+                                    window.buildTimeline();
+                                    window.__sophiTimelineBuilt = true;
+                                }
+                            }
+                        } catch (err) {
+                            console.error('buildTimeline error', err);
+                        }
+                        try {
+                            if (typeof window.playEngine === 'function') {
+                                window.playEngine();
+                            }
+                            if (typeof window.playAnimation === 'function') {
+                                window.playAnimation();
+                            }
+                            if (window.masterTimeline) {
+                                window.masterTimeline.seek(0);
+                                window.masterTimeline.play();
+                            }
+                        } catch (err) {
+                            console.error('playEngine error', err);
+                        }
+                    };
+                    start();
+                    // Trigger again shortly after in case assets finished loading a bit later
+                    setTimeout(start, 1000);
                 }
             """)
             print(f"   [PLAY] Animation triggered")
+
+            # Wait for first frame changes to ensure animation actually drew content
+            try:
+                await page.wait_for_function("""
+                    () => {
+                        const stage = document.querySelector('#stage') || document.querySelector('#recording-container')
+                        if (!stage) return false
+                        const scenes = stage.querySelectorAll('.scene')
+                        if (scenes.length > 0) {
+                            return Array.from(scenes).some(scene => {
+                                const opacity = window.getComputedStyle(scene).opacity
+                                return parseFloat(opacity) > 0
+                            })
+                        }
+                        // fallback: check if canvas/inner HTML populated
+                        return stage.innerHTML && stage.innerHTML.trim().length > 0
+                    }
+                """, timeout=15000)
+            except Exception:
+                print("   [WARN] Scene elements did not report visible before timeout. Recording anyway.")
             
             # Wait for the animation duration
             print(f"   [RECORDING] Recording for {duration}s...")

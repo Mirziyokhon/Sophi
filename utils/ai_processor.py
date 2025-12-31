@@ -260,15 +260,17 @@ Learning Style: Direct, straightforward explanations using common experiences an
         camera_hint = self._suggest_camera_motion(keywords)
 
         detail_clause = ""
+        literal_clause = ""
         if keywords:
             primary = ', '.join(keywords[:5])
             detail_clause = f" Highlight {primary} with labeled callouts and directional arrows."
-
+            literal_clause = f" Every noun from the narration must be drawn explicitly as {primary}."
+        
         texture_clause = (
             " Render as a realistic sketchbook panel with cross-hatching, ink smudges, and sticky-note annotations."
         )
-
-        enriched = f"{prompt or narration}. {context_hint} {camera_hint}{detail_clause} {texture_clause}"
+        
+        enriched = f"{prompt or narration}. {context_hint} {camera_hint}{literal_clause}{detail_clause} {texture_clause}"
         return ' '.join(enriched.split())
 
     def _extract_visual_keywords(self, text: str, max_terms: int = 6) -> List[str]:
@@ -739,6 +741,8 @@ Rules:
 - You MUST use these start/end timestamps verbatim. No guessing, no re-timing.
 - Each segment's narration text maps 1:1 with the captions you render.
 - Each scene description must be drawn exactly as specified in its "scene" field.
+- Every concrete noun or prop mentioned in the narration must appear on-screen as a clearly labeled object. No abstract placeholders.
+- If a narration line lists multiple objects, show all of them simultaneously with arrows/annotations explaining their relationships.
 
 ## STYLE LOCK – SKETCHBOOK SCRIBBLE ONLY
 - ALWAYS use hand-drawn pencil/ink strokes with visible jitter and textured paper backgrounds
@@ -762,6 +766,7 @@ Rules:
 - Each beat should describe a believable scene (camera angle, lighting, materials, background context)
 - Use props from real life (lab tools, cityscapes, students, chalkboards) drawn in sketch form
 - Add atmospheric motion: drifting paper dust, pulsing energy lines, animated annotations
+- Each object must be recognizable and match narration vocabulary exactly—if the script says "solar panels", the stage must show sketchy solar panels, not generic rectangles.
 
 ## TECHNICAL CAPABILITIES
 You can use ANY of these web technologies:

@@ -79,7 +79,7 @@ export function Processing({ onComplete }: ProcessingProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="min-h-screen flex flex-col items-center justify-center px-4 pt-32"
+      className="min-h-screen flex flex-col items-center justify-center px-4 pt-32 pb-32 md:pb-48"
     >
       <div className="w-full max-w-md">
         {/* Animated Spinner */}
