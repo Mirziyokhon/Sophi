@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Play, Pause, Download } from 'lucide-react'
+import { Play, Pause, Download, ExternalLink, RefreshCw } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
 interface SketchAnimationPlayerProps {
@@ -23,6 +23,7 @@ export function SketchAnimationPlayer({
   const [isExporting, setIsExporting] = useState(false)
   const [isScrubbing, setIsScrubbing] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [iframeKey, setIframeKey] = useState(0)
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -46,6 +47,96 @@ export function SketchAnimationPlayer({
     accent3: '#3498DB',
     accent4: '#F39C12',
     thoughtBubble: isDark ? '#a0a0a0' : '#666'
+  }
+
+  const hasGeminiAnimation =
+    Boolean(animationHtml) &&
+    animationHtml.length > 500 &&
+    animationHtml.toLowerCase().includes('<html')
+
+  if (hasGeminiAnimation) {
+    const createHtmlBlobUrl = () => {
+      const blob = new Blob([animationHtml], { type: 'text/html' })
+      return URL.createObjectURL(blob)
+    }
+
+    const handleOpenFullscreen = () => {
+      const url = createHtmlBlobUrl()
+      window.open(url, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    }
+
+    const handleDownloadHtml = () => {
+      const url = createHtmlBlobUrl()
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${filename?.replace(/\.mp4$/i, '') || 'sophi_animation'}.html`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      setTimeout(() => URL.revokeObjectURL(url), 1_000)
+    }
+
+    const handleRestartAnimation = () => {
+      setIframeKey(prev => prev + 1)
+    }
+
+    return (
+      <div className="w-full max-w-4xl mx-auto bg-card border border-brand/20 rounded-2xl p-6 shadow-2xl space-y-5">
+        <div className="relative w-full bg-muted rounded-lg overflow-hidden aspect-video border border-brand/10">
+          <iframe
+            key={iframeKey}
+            srcDoc={animationHtml}
+            sandbox="allow-scripts allow-same-origin"
+            className="absolute inset-0 w-full h-full"
+            style={{ border: 'none', backgroundColor: '#0b0b0b' }}
+            scrolling="no"
+            title="Sketchbook Animation Preview"
+          />
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button
+              onClick={handleRestartAnimation}
+              className="px-4 py-2 rounded-full bg-background/80 text-foreground text-sm font-medium shadow-md hover:bg-background transition-colors flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Restart
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <button
+            onClick={handleOpenFullscreen}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg hover:bg-primary/90 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open Fullscreen
+          </button>
+          <button
+            onClick={handleDownloadHtml}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand/10 border border-brand/30 text-brand font-semibold hover:bg-brand/20 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Download HTML
+          </button>
+          <a
+            href={`/videos/${filename}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-foreground font-semibold hover:bg-muted transition-colors"
+          >
+            View Source File
+          </a>
+        </div>
+
+        {script && (
+          <div className="bg-brand/5 border border-brand/20 rounded-xl p-4 text-sm leading-relaxed text-foreground/80">
+            <p className="font-semibold text-foreground mb-2">Narration Highlight</p>
+            <p className="line-clamp-4">{script}</p>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // Parse script into timed subtitles and voiceover segments

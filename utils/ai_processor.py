@@ -920,13 +920,6 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
             
             # Try Gemini 3 Pro first, fall back to 2.0 Flash if not available
             model_options = ['gemini-3-pro-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-pro']
-            if html_content:
-                with open(html_filename, "w", encoding="utf-8") as html_file:
-                    html_file.write(html_content)
-                result['html_path'] = str(html_filename)
-                print(f"✅ HTML animation saved to {html_filename}")
-            else:
-                print("⚠️ No HTML animation content to save.")
             json_data = None
             last_error = None
             
@@ -973,21 +966,45 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
                 # Extract caption texts from HTML for TTS generation
                 import re
                 caption_texts = []
+                html_timeline_segments = []
                 
-                # Try to find text content in various formats
-                text_patterns = [
-                    r'texts\s*=\s*\[(.*?)\]',  # texts = ["...", "..."]
-                    r'captions\s*=\s*\[(.*?)\]',  # captions = ["...", "..."]
-                    r'updateCaption\([^)]*\)',  # updateCaption calls
-                ]
+                # Try to extract timelineSegments array (preferred source)
+                try:
+                    timeline_match = re.search(r'timelineSegments\s*=\s*(\[[\s\S]*?\])\s*;', json_data)
+                    if timeline_match:
+                        timeline_json_str = timeline_match.group(1)
+                        html_timeline_segments = json.loads(timeline_json_str)
+                        print(f"   📋 Parsed {len(html_timeline_segments)} timeline segments from HTML")
+                except json.JSONDecodeError as timeline_error:
+                    print(f"   ⚠️ Failed to parse timelineSegments JSON: {timeline_error}")
+                    html_timeline_segments = []
                 
-                for pattern in text_patterns:
-                    matches = re.findall(pattern, json_data, re.DOTALL)
-                    if matches:
-                        # Extract quoted strings
-                        quoted_strings = re.findall(r'"([^"]+)"', matches[0])
-                        caption_texts.extend(quoted_strings)
-                        break
+                # Prefer caption text from timeline segments
+                if html_timeline_segments:
+                    for segment in html_timeline_segments:
+                        text_value = (
+                            segment.get('text')
+                            or segment.get('caption')
+                            or segment.get('narration')
+                        )
+                        if text_value and isinstance(text_value, str):
+                            caption_texts.append(text_value)
+                
+                # Fallback regex searches if timeline segments missing
+                if not caption_texts:
+                    text_patterns = [
+                        r'texts\s*=\s*\[(.*?)\]',  # texts = ["...", "..."]
+                        r'captions\s*=\s*\[(.*?)\]',  # captions = ["...", "..."]
+                        r'updateCaption\([^)]*\)',  # updateCaption calls
+                    ]
+                    
+                    for pattern in text_patterns:
+                        matches = re.findall(pattern, json_data, re.DOTALL)
+                        if matches:
+                            # Extract quoted strings
+                            quoted_strings = re.findall(r'"([^"]+)"', matches[0])
+                            caption_texts.extend(quoted_strings)
+                            break
                 
                 # Clean up HTML tags from captions
                 cleaned_captions = []
@@ -1001,24 +1018,52 @@ Generate the COMPLETE HTML document with embedded CSS and JavaScript. No markdow
                 
                 # Generate TTS audio if captions found
                 audio_data_uri = None
+                timeline_events: List[Dict[str, float]] = []
+                
+                # Build timeline events from HTML timeline segments when available
+                if html_timeline_segments:
+                    default_duration = max(
+                        1.5,
+                        (duration_seconds or 90) / max(1, len(html_timeline_segments))
+                    )
+                    for idx, segment in enumerate(html_timeline_segments):
+                        text_value = (
+                            (segment.get('text') or segment.get('caption') or segment.get('narration') or '').strip()
+                        )
+                        if not text_value:
+                            continue
+                        start_raw = segment.get('start') or segment.get('begin') or segment.get('time')
+                        end_raw = segment.get('end')
+                        try:
+                            start_val = float(start_raw)
+                        except (TypeError, ValueError):
+                            start_val = idx * default_duration
+                        try:
+                            end_val = float(end_raw)
+                        except (TypeError, ValueError):
+                            end_val = start_val + default_duration
+                        duration_val = max(0.75, end_val - start_val)
+                        timeline_events.append({
+                            "text": text_value,
+                            "start": round(start_val, 2),
+                            "duration": round(duration_val, 2)
+                        })
+                
                 if cleaned_captions:
                     try:
                         print(f"   Extracted {len(cleaned_captions)} captions for TTS")
                         audio_output_path = Path(config.TEMP_DIR) / f"narration_{int(time.time())}.mp3"
                         audio_output_path.parent.mkdir(parents=True, exist_ok=True)
                         
-                        # Create evenly spaced timeline events across requested duration
                         if duration_seconds <= 0:
                             duration_seconds = 90
-                        spacing = max(1.5, duration_seconds / max(1, len(cleaned_captions)))
-                        timeline_events = [
-                            {
-                                "text": text,
-                                "start": round(idx * spacing, 2),
-                                "duration": spacing
-                            }
-                            for idx, text in enumerate(cleaned_captions)
-                        ]
+                        
+                        # If we could not derive events from HTML, synthesize them from captions
+                        if not timeline_events:
+                            timeline_events = self._build_caption_timeline(
+                                cleaned_captions,
+                                duration_seconds
+                            )
                         
                         audio_data_uri = self._generate_timeline_narration(
                             timeline_events,
