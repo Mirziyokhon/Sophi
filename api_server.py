@@ -533,9 +533,8 @@ async def _generate_video_logic(
 async def generate_video(
     request: VideoGenerationRequest,
     http_request: Request,
-    current_user: Optional[models.User] = Depends(get_optional_user),
 ):
-    return await _generate_video_logic(request, http_request, current_user)
+    return await _generate_video_logic(request, http_request, current_user=None)
 
 
 @app.post("/api/generate-mp4-video")

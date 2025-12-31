@@ -119,6 +119,10 @@ export default function Home() {
 
             <main className="flex-grow pt-32">
               {screen === 'landing' && <Landing onStart={handleStartLearning} />}
+              {screen === 'upload' && <Upload onNext={handleUploadNext} />}
+              {screen === 'personalization' && <Personalization onNext={handlePersonalizationNext} />}
+              {screen === 'processing' && <Processing onComplete={handleProcessingComplete} />}
+              {screen === 'player' && <Player onCreateAnother={handleCreateAnother} />}
             </main>
             <Footer />
           </div>

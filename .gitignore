@@ -75,3 +75,7 @@ v0-design/.netlify/
 # Deployment
 *.ps1
 *.sh
+current-env.txt
+env.yaml
+sophi-frontend-build.tgz
+sophi_dev.db
