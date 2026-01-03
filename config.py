@@ -46,6 +46,7 @@ AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME", "rusaldo-videos")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", "3000"))
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
 VIDEO_STORAGE_DAYS = int(os.getenv("VIDEO_STORAGE_DAYS", "30"))
+USER_RATE_LIMIT_PER_HOUR = int(os.getenv("USER_RATE_LIMIT_PER_HOUR", "50"))
 
 # Directories
 UPLOAD_DIR = "uploads"

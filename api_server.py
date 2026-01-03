@@ -392,6 +392,11 @@ async def _generate_video_logic(
             print(f"   📍 Duration: {request.duration_seconds}s")
             print(f"   ⏳ Recording in progress (this takes ~{request.duration_seconds + 10}s)...")
 
+            # Recording time grows roughly with requested duration (real-time capture + encoding).
+            # Give the recorder plenty of headroom by allowing ~2x duration plus extra buffer.
+            recorder_timeout = max(240, (request.duration_seconds * 2) + 120)
+            print(f"   ⏱️ Recorder timeout budget: {recorder_timeout}s")
+
             try:
                 result = subprocess.run(
                     [
@@ -404,7 +409,7 @@ async def _generate_video_logic(
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=request.duration_seconds + 120,
+                    timeout=recorder_timeout,
                 )
 
                 if result.stdout:

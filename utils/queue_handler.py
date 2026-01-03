@@ -10,6 +10,8 @@ from collections import deque
 from datetime import datetime, timedelta
 import threading
 
+import config
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("QueueHandler")
 
@@ -185,7 +187,7 @@ class RequestQueue:
 class UserRateLimiter:
     """Track and limit requests per user (by IP or session)."""
     
-    def __init__(self, max_requests_per_hour: int = 3):
+    def __init__(self, max_requests_per_hour: int = config.USER_RATE_LIMIT_PER_HOUR):
         self.max_requests_per_hour = max_requests_per_hour
         self.user_requests = {}  # {user_id: [timestamp1, timestamp2, ...]}
         self.lock = threading.Lock()
@@ -268,4 +270,4 @@ class UserRateLimiter:
 
 # Global instances
 request_queue = RequestQueue(max_concurrent=3, rate_limit_per_minute=10)
-user_rate_limiter = UserRateLimiter(max_requests_per_hour=3)
+user_rate_limiter = UserRateLimiter(max_requests_per_hour=config.USER_RATE_LIMIT_PER_HOUR)
